@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { TrendingUp, Users, Calendar, Mail } from 'lucide-react';
+import { Users, Calendar, Mail } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { toast } from 'sonner';
+import { Handshake, MessageCircle, AlertCircle, ArrowRight } from 'lucide-react';
 
 // Define duplicate interfaces for now to avoid major refactor, ideally these go in a types file
 interface Email {
@@ -20,28 +22,9 @@ const data = [
 ];
 
 const Dashboard: React.FC = () => {
-    // Read from localStorage manually to avoid hook complexity if key doesn't exist yet, 
-    // or better, use the hook but we need to pass initial values.
-    // simpler: just read directly for stats since we don't 'set' them here.
-
-    const [volunteerCount, setVolunteerCount] = useState(0);
     const [unreadEmails, setUnreadEmails] = useState(0);
-    const [eventCount, setEventCount] = useState(0);
 
     useEffect(() => {
-        // Volunteers
-        const storedVolunteers = localStorage.getItem('aniquem-volunteers');
-        if (storedVolunteers) {
-            try {
-                const parsed = JSON.parse(storedVolunteers);
-                setVolunteerCount(parsed.length);
-            } catch (e) {
-                setVolunteerCount(124); // Fallback
-            }
-        } else {
-            setVolunteerCount(5); // Initial mock count
-        }
-
         // Emails
         const storedEmails = localStorage.getItem('aniquem-emails');
         if (storedEmails) {
@@ -57,26 +40,23 @@ const Dashboard: React.FC = () => {
             setUnreadEmails(2); // Initial inbox has 2 unread
         }
 
-        // Events
-        const storedEvents = localStorage.getItem('aniquem-events');
-        if (storedEvents) {
-            try {
-                const parsed = JSON.parse(storedEvents);
-                setEventCount(parsed.length);
-            } catch (e) {
-                setEventCount(3);
-            }
-        } else {
-            setEventCount(3);
-        }
+        // Simulate Smart Capture Notification after 3 seconds
+        const timer = setTimeout(() => {
+            toast.success('¡Nueva Captura Automática!', {
+                description: 'El sistema detectó un mensaje de WhatsApp de "Alicorp" y ha creado un nuevo prospecto.',
+                icon: <MessageCircle className="h-5 w-5 text-green-500" />,
+                duration: 5000,
+            });
+        }, 3000);
 
+        return () => clearTimeout(timer);
     }, []);
 
     const stats = [
-        { name: 'Total Voluntarios', stat: volunteerCount.toString(), icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+        { name: 'Prospectos Nuevos', stat: '8', icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
         { name: 'Mensajes Sin Leer', stat: unreadEmails.toString(), icon: Mail, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-        { name: 'Nuevas Donaciones', stat: 'S/. 12,400', icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10' },
-        { name: 'Eventos', stat: eventCount.toString(), icon: Calendar, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
+        { name: 'Alianzas en Proceso', stat: '14', icon: Handshake, color: 'text-primary', bg: 'bg-primary/10' },
+        { name: 'Reuniones Hoy', stat: '4', icon: Calendar, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
     ];
 
     return (
@@ -115,7 +95,7 @@ const Dashboard: React.FC = () => {
                 {/* Donations Chart */}
                 <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-foreground">Tendencia de Donaciones</h3>
+                        <h3 className="text-lg font-bold text-foreground">Pipeline de Alianzas (Prospectos)</h3>
                         <select className="text-xs border-none bg-muted/50 rounded-md px-2 py-1 text-muted-foreground focus:ring-0">
                             <option>Últimos 6 meses</option>
                             <option>Este año</option>
@@ -124,7 +104,6 @@ const Dashboard: React.FC = () => {
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={data}>
-                                <div style={{ background: 'linear-gradient(180deg, rgba(255, 0, 0, 0.1) 0%, rgba(255, 0, 0, 0) 100%)' }} />
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
                                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dy={10} />
                                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dx={-10} tickFormatter={(value) => `S/.${value / 1000}k`} />
@@ -147,7 +126,7 @@ const Dashboard: React.FC = () => {
                 {/* Volunteers Chart */}
                 <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-foreground">Nuevos Voluntarios</h3>
+                        <h3 className="text-lg font-bold text-foreground">Conversión WhatsApp/Email</h3>
                         <div className="flex space-x-2">
                             <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
                         </div>
@@ -175,6 +154,43 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
 
+            {/* Integration Tips & Calendly */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="md:col-span-2 bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border border-l-4 border-l-primary transition-shadow duration-300">
+                    <div className="flex items-center gap-3 mb-4">
+                        <AlertCircle className="h-6 w-6 text-primary" />
+                        <h3 className="text-lg font-bold text-foreground">Guía de Integración Funcional</h3>
+                    </div>
+                    <div className="space-y-4 text-sm text-muted-foreground">
+                        <p>Para que este portal sea 100% automático sin backend:</p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Publica tu Google Sheets como CSV y pega la URL en `Alianzas.tsx`.</li>
+                            <li>Usa <strong>Make.com</strong> para conectar tu correo de alianzas con la hoja de Sheets.</li>
+                            <li>Los contactos nuevos aparecerán aquí automáticamente.</li>
+                        </ul>
+                        <div className="pt-2">
+                            <button className="text-primary font-bold hover:underline flex items-center">
+                                Ver documentación de configuración <ArrowRight className="ml-2 h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-primary shadow-lg rounded-2xl p-6 text-primary-foreground flex flex-col justify-between">
+                    <div>
+                        <Calendar className="h-8 w-8 mb-4 opacity-80" />
+                        <h3 className="text-xl font-bold mb-2">Agendar Reunión</h3>
+                        <p className="text-sm opacity-90 mb-6">Usa Calendly para coordinar alianzas sin correos de ida y vuelta.</p>
+                    </div>
+                    <button
+                        onClick={() => window.open('https://calendly.com', '_blank')}
+                        className="w-full py-3 bg-background text-primary rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-md"
+                    >
+                        Abrir Calendly
+                    </button>
+                </div>
+            </div>
+
             {/* Recent Activity / Content */}
             <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                 <h3 className="text-lg font-bold text-foreground mb-6">Actividad Reciente</h3>
@@ -182,8 +198,8 @@ const Dashboard: React.FC = () => {
                     <li className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-primary before:rounded-full">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                             <div>
-                                <h4 className="text-sm font-semibold text-foreground">Reunión de planificación</h4>
-                                <p className="text-sm text-muted-foreground mt-1">Programada por Maria Garcia para mañana a las 10:00 AM</p>
+                                <h4 className="text-sm font-semibold text-foreground">Reunión de planificación - Alianzas</h4>
+                                <p className="text-sm text-muted-foreground mt-1">Programada vía Calendly para mañana a las 10:00 AM</p>
                             </div>
                             <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">hace 1h</span>
                         </div>
@@ -191,8 +207,8 @@ const Dashboard: React.FC = () => {
                     <li className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-blue-500 before:rounded-full">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
                             <div>
-                                <h4 className="text-sm font-semibold text-foreground">Nuevo voluntario registrado</h4>
-                                <p className="text-sm text-muted-foreground mt-1">Juan Perez se ha registrado como voluntario en el área de psicología.</p>
+                                <h4 className="text-sm font-semibold text-foreground">Nueva empresa registrada automáticamente</h4>
+                                <p className="text-sm text-muted-foreground mt-1">Alicorp S.A.A. ha sido añadida vía captura de WhatsApp Business.</p>
                             </div>
                             <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">hace 3h</span>
                         </div>
@@ -202,5 +218,6 @@ const Dashboard: React.FC = () => {
         </div>
     );
 };
+
 
 export default Dashboard;

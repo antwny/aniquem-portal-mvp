@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Search, Star, Send, Inbox, Trash2, X, Paperclip, Image as ImageIcon, MoreVertical, ArrowLeft, Reply, Forward, Calendar } from 'lucide-react';
+import { Search, Star, Send, Inbox, Trash2, X, Paperclip, Image as ImageIcon, MoreVertical, ArrowLeft, Reply, Forward, Calendar, RefreshCw } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
 import { EmailService } from '../services/EmailService';
@@ -92,15 +92,99 @@ const mockEmails: Email[] = [
     },
 ];
 
+// URL del CSV de Google Sheets para Correos (puede ser la misma o una diferente)
+const EMAIL_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRxPXrwBZkE3qRWOOtgbCf4KviAqr8LBN1rup3t-2EOXCMJOHaKFRXf2QqAampTEUCS9O925vYDC2Tw/pub?output=csv';
+
 const Email: React.FC = () => {
     const [selectedTab, setSelectedTab] = useState<'inbox' | 'sent' | 'trash'>('inbox');
+    const [filterStatus, setFilterStatus] = useState<'all' | 'unread' | 'starred'>('all');
     const [emails, setEmails] = useLocalStorage<Email[]>('aniquem-emails', mockEmails);
+    const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isComposeOpen, setIsComposeOpen] = useState(false);
     const [newEmail, setNewEmail] = useState({ to: '', subject: '', message: '' });
     const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachments, setAttachments] = useState<File[]>([]);
+
+    const fetchEmailData = async () => {
+        if (!EMAIL_SHEETS_CSV_URL) {
+            toast.info('Sin URL', { description: 'Configura la URL del CSV en Email.tsx' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            // Cache busting to ensure we get fresh data from Google Sheets
+            const urlWithCacheBuster = EMAIL_SHEETS_CSV_URL.includes('?')
+                ? `${EMAIL_SHEETS_CSV_URL}&t=${Date.now()}`
+                : `${EMAIL_SHEETS_CSV_URL}?t=${Date.now()}`;
+
+            const response = await fetch(urlWithCacheBuster, { cache: 'no-store' });
+            const text = await response.text();
+
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            if (rows.length <= 1) {
+                toast.warning('Sin correos nuevos', { description: 'No se encontraron registros en el Sheets.' });
+                return;
+            }
+
+            const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+
+            // Expected headers: id, sender, subject, preview, body, date, starred, read, label, folder
+            const newEmailsFromSheet: Email[] = rows.slice(1).map((row, index) => {
+                const values = row.split(',').map(v => v.trim());
+                const obj: any = {};
+                headers.forEach((header, i) => {
+                    obj[header] = values[i];
+                });
+
+                const sender = obj.sender || obj.remitente || obj.from || 'Remitente Desconocido';
+                const subject = obj.subject || obj.asunto || 'Sin Asunto';
+                const date = obj.date || obj.fecha || 'Ahora';
+
+                return {
+                    id: parseInt(obj.id) || (2000000 + index), // IDs altos para evitar conflictos con mocks
+                    sender,
+                    subject,
+                    preview: obj.preview || (obj.body || obj.contenido || obj.text ? (obj.body || obj.contenido || obj.text).substring(0, 50) + '...' : 'Sin contenido'),
+                    body: obj.body || obj.contenido || obj.text || obj.preview || '',
+                    date,
+                    starred: (obj.starred || obj.destacado)?.toLowerCase() === 'true',
+                    read: (obj.read || obj.leido)?.toLowerCase() === 'true',
+                    label: obj.label || obj.etiqueta || 'Nuevo',
+                    deleted: (obj.deleted || obj.eliminado)?.toLowerCase() === 'true' || false,
+                    folder: (obj.folder || obj.carpeta || 'inbox') as 'inbox' | 'sent' | 'trash',
+                    attachments: []
+                };
+            });
+
+            // Logic: Merge with local data based on a combination of ID and unique fields
+            setEmails(prev => {
+                // Keep "Sent" emails and "Trash" (if they were deleted locally)
+                const localOnly = prev.filter(e => e.folder === 'sent' || (e.folder === 'trash' && e.deleted));
+
+                // For the Inbox, we use the Sheet as the Source of Truth
+                // but we keep Mock emails if they haven't been "overridden" by the sheet
+                const existingInbox = prev.filter(e => e.folder === 'inbox' || !e.folder);
+
+                // Deduplicate: If an email with same Subject+Sender exists, prioritize the one from the Sheet
+                const sheetKeys = new Set(newEmailsFromSheet.map(e => `${e.sender}-${e.subject}`.toLowerCase()));
+                const filteredExisting = existingInbox.filter(e => !sheetKeys.has(`${e.sender}-${e.subject}`.toLowerCase()));
+
+                return [...newEmailsFromSheet, ...filteredExisting, ...localOnly].sort((a, b) => b.id - a.id);
+            });
+
+            toast.success('Bandeja sincronizada', {
+                description: `Se han cargado ${newEmailsFromSheet.length} mensajes desde Sheets.`
+            });
+        } catch (error) {
+            console.error('Error fetching emails:', error);
+            toast.error('Error de sincronización', { description: 'Verifica la conexión y que el Sheets sea público.' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const toggleStar = (id: number) => {
         setEmails(emails.map(email =>
@@ -196,11 +280,19 @@ const Email: React.FC = () => {
     const filteredEmails = emails.filter(email => {
         if (selectedTab === 'trash') return email.folder === 'trash' || email.deleted;
         if (selectedTab === 'sent') return email.folder === 'sent';
-        return (email.folder === 'inbox' || !email.folder) && !email.deleted;
+
+        // Base folder filtering
+        const isInInbox = (email.folder === 'inbox' || !email.folder) && !email.deleted;
+        if (!isInInbox) return false;
+
+        // Status filtering
+        if (filterStatus === 'unread') return !email.read;
+        if (filterStatus === 'starred') return email.starred;
+        return true;
     }).filter(email =>
         email.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
         email.sender.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ).sort((a, b) => b.id - a.id);
 
     const openEmail = (email: Email) => {
         if (!email.read) {
@@ -212,31 +304,66 @@ const Email: React.FC = () => {
     return (
         <div className="h-full flex flex-col bg-card rounded-lg shadow overflow-hidden relative border border-border">
             {/* Email Toolbar */}
-            <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
-                <div className="flex items-center space-x-4 flex-1 mr-4">
-                    <h2 className="text-xl font-semibold text-foreground">Correo Interno</h2>
-                    <div className="relative rounded-md shadow-sm flex-1 max-w-md">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-4 w-4 text-muted-foreground" />
+            <div className="p-4 border-b border-border space-y-4 bg-muted/30">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-4 flex-1 mr-4">
+                        <h2 className="text-xl font-semibold text-foreground">Correo Interno</h2>
+                        <div className="relative rounded-md shadow-sm flex-1 max-w-md">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <input
+                                type="text"
+                                className="block w-full bg-background border-input rounded-md pl-10 sm:text-sm py-2 border focus:ring-ring focus:border-ring text-foreground placeholder:text-muted-foreground"
+                                placeholder="Buscar en el correo..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                         </div>
-                        <input
-                            type="text"
-                            className="block w-full bg-background border-input rounded-md pl-10 sm:text-sm py-2 border focus:ring-ring focus:border-ring text-foreground placeholder:text-muted-foreground"
-                            placeholder="Buscar correo..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    </div>
+                    <div className="flex space-x-2">
+                        <button
+                            onClick={fetchEmailData}
+                            disabled={isLoading}
+                            className="inline-flex items-center px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                            title="Sincronizar con Google Sheets"
+                        >
+                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            Sincronizar
+                        </button>
+                        <button
+                            onClick={() => setIsComposeOpen(true)}
+                            className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors flex items-center shadow-sm"
+                        >
+                            <Send className="h-4 w-4 mr-2" />
+                            Redactar
+                        </button>
                     </div>
                 </div>
-                <div className="flex space-x-2">
-                    <button
-                        onClick={() => setIsComposeOpen(true)}
-                        className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors flex items-center shadow-sm"
-                    >
-                        <Send className="h-4 w-4 mr-2" />
-                        Redactar
-                    </button>
-                </div>
+
+                {/* Filter Chips */}
+                {!selectedEmail && selectedTab === 'inbox' && (
+                    <div className="flex items-center space-x-2 pb-1">
+                        <button
+                            onClick={() => setFilterStatus('all')}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                        >
+                            Todos
+                        </button>
+                        <button
+                            onClick={() => setFilterStatus('unread')}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'unread' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                        >
+                            No leídos ({emails.filter(e => (e.folder === 'inbox' || !e.folder) && !e.read && !e.deleted).length})
+                        </button>
+                        <button
+                            onClick={() => setFilterStatus('starred')}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'starred' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                        >
+                            Destacados
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 flex overflow-hidden">

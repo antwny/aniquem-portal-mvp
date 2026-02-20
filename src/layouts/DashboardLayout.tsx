@@ -13,7 +13,8 @@ import {
     Moon,
     Sun,
     ChevronRight,
-    Check
+    Check,
+    Handshake
 } from 'lucide-react';
 
 interface Notification {
@@ -38,6 +39,7 @@ const DashboardLayout: React.FC = () => {
 
     const navigation = [
         { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+        { name: 'Alianzas', href: '/alianzas', icon: Handshake },
         { name: 'Correos', href: '/email', icon: Mail },
         { name: 'Calendario', href: '/calendar', icon: Calendar },
         { name: 'Voluntarios', href: '/volunteers', icon: Users },
