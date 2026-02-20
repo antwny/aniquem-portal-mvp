@@ -6,15 +6,15 @@ import {
     LayoutDashboard,
     Mail,
     Calendar,
-    Users,
-    Menu,
+    Handshake,
+    ShieldCheck,
     LogOut,
+    Menu,
     Bell,
+    ChevronRight,
     Moon,
     Sun,
-    ChevronRight,
-    Check,
-    Handshake
+    Check
 } from 'lucide-react';
 
 interface Notification {
@@ -42,7 +42,7 @@ const DashboardLayout: React.FC = () => {
         { name: 'Alianzas', href: '/alianzas', icon: Handshake },
         { name: 'Correos', href: '/email', icon: Mail },
         { name: 'Calendario', href: '/calendar', icon: Calendar },
-        { name: 'Voluntarios', href: '/volunteers', icon: Users },
+        { name: 'Usuarios', href: '/users', icon: ShieldCheck },
     ];
 
     const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
@@ -86,7 +86,6 @@ const DashboardLayout: React.FC = () => {
             if (storedEvents) {
                 try {
                     const parsedEvents = JSON.parse(storedEvents);
-                    // Mock logic: just take the first 2 events
                     const upcoming = parsedEvents.slice(0, 2);
                     upcoming.forEach((e: any) => {
                         newNotifications.push({
@@ -109,7 +108,6 @@ const DashboardLayout: React.FC = () => {
         }
     }, [isNotificationsOpen]);
 
-    // Close notifications when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -142,12 +140,10 @@ const DashboardLayout: React.FC = () => {
                     }`}
             >
                 <div className="h-full flex flex-col overflow-hidden">
-                    {/* Logo Area */}
                     <div className="h-20 flex items-center justify-center border-b border-border bg-card/50 backdrop-blur-md">
                         <img src="logo.png" alt="Aniquem" className="h-12 w-auto transition-transform hover:scale-105 duration-300" />
                     </div>
 
-                    {/* Navigation */}
                     <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
                         <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] mb-4 px-4">
                             Menu Principal
@@ -160,8 +156,8 @@ const DashboardLayout: React.FC = () => {
                                     to={item.href}
                                     onClick={() => setIsSidebarOpen(false)}
                                     className={`group flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300 relative overflow-hidden ${isActive
-                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 translate-x-1'
-                                        : 'text-foreground/60 hover:bg-muted/80 hover:text-primary hover:translate-x-1'
+                                            ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 translate-x-1'
+                                            : 'text-foreground/60 hover:bg-muted/80 hover:text-primary hover:translate-x-1'
                                         }`}
                                 >
                                     <item.icon className={`mr-3 h-5 w-5 transition-all duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
@@ -177,12 +173,11 @@ const DashboardLayout: React.FC = () => {
                         })}
                     </nav>
 
-                    {/* User Profile / Logout - Stationary Bottom */}
                     <div className="mt-auto p-4 border-t border-border bg-muted/30 backdrop-blur-xl">
                         <div className="flex items-center mb-4 p-2.5 rounded-xl bg-background/50 border border-border/50 group cursor-pointer transition-all hover:border-primary/30">
                             <div className="relative">
                                 <img
-                                    src={user?.avatar || 'https://ui-avatars.com/api/?name=User'}
+                                    src={user?.avatar || `https://ui-avatars.com/api/?name=${user?.name || 'User'}`}
                                     alt="User"
                                     className="h-10 w-10 rounded-xl border-2 border-primary/10 object-cover"
                                 />
@@ -206,9 +201,7 @@ const DashboardLayout: React.FC = () => {
                 </div>
             </aside>
 
-            {/* Main Content Area */}
             <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
-                {/* Header */}
                 <header className="sticky top-0 z-40 w-full bg-background/60 backdrop-blur-xl border-b border-border/50 shadow-sm">
                     <div className="px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center h-16">
                         <div className="flex items-center">
@@ -219,7 +212,6 @@ const DashboardLayout: React.FC = () => {
                                 <Menu className="h-6 w-6" />
                             </button>
 
-                            {/* Title - Visible on Desktop */}
                             <div className="hidden lg:flex items-center ml-2">
                                 <div className="h-6 w-1 bg-primary rounded-full mr-4" />
                                 <h1 className="text-lg font-black tracking-tight text-foreground uppercase">
@@ -239,7 +231,6 @@ const DashboardLayout: React.FC = () => {
                                 {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
                             </button>
 
-                            {/* Notification Dropdown */}
                             <div className="relative" ref={notificationRef}>
                                 <button
                                     onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
@@ -267,8 +258,8 @@ const DashboardLayout: React.FC = () => {
                                                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notification.message}</p>
                                                             <div className="mt-2 flex items-center">
                                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${notification.type === 'email' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                                                    notification.type === 'event' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
-                                                                        'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                                                                        notification.type === 'event' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                                                            'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                                                                     }`}>
                                                                     {notification.type === 'email' ? 'Correo' : notification.type === 'event' ? 'Evento' : 'Sistema'}
                                                                 </span>
@@ -293,7 +284,6 @@ const DashboardLayout: React.FC = () => {
                     </div>
                 </header>
 
-                {/* Page Content */}
                 <main className="flex-1 overflow-auto bg-muted/20 p-4 sm:p-6 lg:p-8">
                     <div className="max-w-7xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <Outlet />

@@ -9,7 +9,7 @@ import Dashboard from './pages/Dashboard';
 import Email from './pages/Email';
 import Calendar from './pages/Calendar';
 import Alianzas from './pages/Alianzas';
-import Volunteers from './pages/Volunteers';
+import Users from './pages/Users';
 import Profile from './pages/Profile';
 import NotFound from './pages/NotFound';
 
@@ -35,7 +35,7 @@ const AppRoutes: React.FC = () => {
         <Route index element={<Dashboard />} />
         <Route path="email" element={<Email />} />
         <Route path="calendar" element={<Calendar />} />
-        <Route path="volunteers" element={<Volunteers />} />
+        <Route path="users" element={<Users />} />
         <Route path="alianzas" element={<Alianzas />} />
         <Route path="profile" element={<Profile />} />
       </Route>

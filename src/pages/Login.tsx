@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, LogIn, Heart } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -14,12 +15,19 @@ const Login: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // Simulate network delay for effect
-        setTimeout(() => {
-            login(email);
-            navigate('/');
+
+        try {
+            const result = await login(email, password);
+            if (result.success) {
+                navigate('/');
+            } else {
+                toast.error('Error de acceso', { description: result.message || 'Credenciales inválidas' });
+            }
+        } catch (error) {
+            toast.error('Error del sistema', { description: 'No se pudo completar el inicio de sesión' });
+        } finally {
             setIsLoading(false);
-        }, 800);
+        }
     };
 
     return (
