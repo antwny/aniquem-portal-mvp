@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
 import { EmailService } from '../services/EmailService';
@@ -24,6 +24,11 @@ const Calendar: React.FC = () => {
         { id: 2, day: 12, month: new Date().getMonth(), year: new Date().getFullYear(), title: 'Campaña Salud', time: '08:00 AM', location: 'Sede Central', color: 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200' },
         { id: 3, day: 15, month: new Date().getMonth(), year: new Date().getFullYear(), title: 'Entrega Donaciones', time: '03:00 PM', color: 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200' },
     ]);
+
+    const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwRJ_VEcURoeHmbdJvE1NWtQpuk6U5hSs_vP6D7T7oOkO77IqBSAwkw_ZTVp11eOoEA/exec';
+    const CALENDAR_SHEETS_CSV_URL: string = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVRyUpYEdCDrSy-caeca47LZ3Op-oLADLrQe9QV1RzwkaBXuLClZEQRwREt8tQZyAfGOYvdK7c2_tA/pub?gid=2018729699&single=true&output=csv'; // URL de la pestaña "Calendario" publicada como CSV
+
+    const [isLoading, setIsLoading] = useState(false);
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newEvent, setNewEvent] = useState({ title: '', day: '', time: '', location: '', color: 'bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200' });
@@ -53,6 +58,63 @@ const Calendar: React.FC = () => {
 
     const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
 
+    const fetchCalendarData = async () => {
+        if (!CALENDAR_SHEETS_CSV_URL) {
+            toast.info('Configura la URL', { description: 'Publica la pestaña "Calendario" como CSV en Google Sheets.' });
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const urlWithCacheBuster = CALENDAR_SHEETS_CSV_URL.includes('?')
+                ? `${CALENDAR_SHEETS_CSV_URL}&t=${Date.now()}`
+                : `${CALENDAR_SHEETS_CSV_URL}?t=${Date.now()}`;
+
+            const response = await fetch(urlWithCacheBuster, { cache: 'no-store' });
+            const text = await response.text();
+
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            if (rows.length <= 1) {
+                toast.warning('Hoja vacía o sin datos válidos');
+                return;
+            }
+
+            const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+
+            const newEvents: Event[] = rows.slice(1).map((row) => {
+                const values = row.split(',').map(v => v.trim());
+                const obj: any = {};
+                headers.forEach((header, i) => { obj[header] = values[i]; });
+
+                return {
+                    id: parseInt(obj.id) || Date.now(),
+                    day: parseInt(obj.dia) || 1,
+                    month: (parseInt(obj.mes) || 1) - 1,
+                    year: parseInt(obj.año) || new Date().getFullYear(),
+                    title: obj.titulo || 'Evento sin título',
+                    time: obj.hora || '',
+                    location: obj.ubicacion || '',
+                    color: obj.tipo_color || 'bg-blue-200 text-blue-800',
+                    guestEmail: obj.email_invitado || ''
+                };
+            });
+
+            // Fusionar evitando duplicados por ID
+            setEvents(prev => {
+                const existingIds = new Set(prev.map(e => e.id));
+                const filteredNew = newEvents.filter(e => !existingIds.has(e.id));
+                return [...prev, ...filteredNew];
+            });
+
+            toast.success('Sincronización exitosa', { description: `Se han cargado ${newEvents.length} eventos.` });
+        } catch (error) {
+            console.error('Error fetching calendar:', error);
+            toast.error('Error de red', { description: 'No se pudo conectar con Google Sheets.' });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleAddEvent = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newEvent.title || !newEvent.day) return;
@@ -70,6 +132,20 @@ const Calendar: React.FC = () => {
         };
 
         setEvents([...events, event]);
+
+        // Sincronización con Google Sheets
+        if (WEBHOOK_URL) {
+            fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(event)
+            }).then(() => {
+                toast.info('Sincronizando...', { description: 'El evento se está guardando en Google Sheets.' });
+            }).catch(err => {
+                console.error('Calendar webhook error:', err);
+            });
+        }
 
         const newEmails = [...emails];
 
@@ -246,6 +322,14 @@ const Calendar: React.FC = () => {
                     <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
                         <h2 className="text-lg font-bold text-foreground capitalize">{monthName}</h2>
                         <div className="flex space-x-2">
+                            <button
+                                onClick={fetchCalendarData}
+                                disabled={isLoading}
+                                className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground transition-all"
+                                title="Sincronizar con Google Sheets"
+                            >
+                                <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+                            </button>
                             <button onClick={prevMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
                                 <ChevronLeft className="h-5 w-5" />
                             </button>
