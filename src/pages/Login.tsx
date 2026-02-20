@@ -34,7 +34,7 @@ const Login: React.FC = () => {
 
                 <div className="relative z-10 flex flex-col items-center text-primary-foreground text-center px-12">
                     <div className="bg-white p-6 rounded-3xl shadow-2xl mb-8 transform hover:scale-105 transition-transform duration-500">
-                        <img src="/logo.png" alt="Aniquem Logo" className="h-32 w-auto" />
+                        <img src="logo.png" alt="Aniquem Logo" className="h-32 w-auto" />
                     </div>
                     <h1 className="text-4xl font-bold mb-4 tracking-tight">Portal de Gestión</h1>
                     <p className="text-lg text-primary-foreground/90 max-w-md leading-relaxed">
@@ -55,7 +55,7 @@ const Login: React.FC = () => {
             <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24 bg-background">
                 <div className="mx-auto w-full max-w-sm lg:w-96">
                     <div className="lg:hidden text-center mb-10">
-                        <img className="mx-auto h-20 w-auto" src="/logo.png" alt="Aniquem" />
+                        <img className="mx-auto h-20 w-auto" src="logo.png" alt="Aniquem" />
                         <h2 className="mt-6 text-2xl font-extrabold text-foreground">Portal de Gestión Interna</h2>
                     </div>
 

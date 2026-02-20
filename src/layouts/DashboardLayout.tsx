@@ -142,7 +142,7 @@ const DashboardLayout: React.FC = () => {
                 <div className="h-full flex flex-col">
                     {/* Logo Area */}
                     <div className="h-20 flex items-center justify-center border-b border-border bg-card/50 backdrop-blur-md">
-                        <img src="/logo.png" alt="Aniquem" className="h-12 w-auto transition-transform hover:scale-105 duration-300" />
+                        <img src="logo.png" alt="Aniquem" className="h-12 w-auto transition-transform hover:scale-105 duration-300" />
                     </div>
 
                     {/* Navigation */}
@@ -252,8 +252,8 @@ const DashboardLayout: React.FC = () => {
                                                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{notification.message}</p>
                                                             <div className="mt-2 flex items-center">
                                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${notification.type === 'email' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
-                                                                        notification.type === 'event' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
-                                                                            'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
+                                                                    notification.type === 'event' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                                                                        'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                                                                     }`}>
                                                                     {notification.type === 'email' ? 'Correo' : notification.type === 'event' ? 'Evento' : 'Sistema'}
                                                                 </span>
