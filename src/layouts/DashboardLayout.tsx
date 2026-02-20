@@ -138,18 +138,18 @@ const DashboardLayout: React.FC = () => {
 
             {/* Sidebar */}
             <aside
-                className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-2xl lg:shadow-none transform transition-transform duration-300 ease-in-out lg:transform-none ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                className={`fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border shadow-2xl lg:shadow-none transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
             >
-                <div className="h-full flex flex-col">
+                <div className="h-full flex flex-col overflow-hidden">
                     {/* Logo Area */}
                     <div className="h-20 flex items-center justify-center border-b border-border bg-card/50 backdrop-blur-md">
                         <img src="logo.png" alt="Aniquem" className="h-12 w-auto transition-transform hover:scale-105 duration-300" />
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 px-4 py-8 space-y-2 overflow-y-auto custom-scrollbar">
-                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 px-4">
+                    <nav className="flex-1 px-4 py-6 space-y-1.5 overflow-y-auto custom-scrollbar">
+                        <div className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-[0.2em] mb-4 px-4">
                             Menu Principal
                         </div>
                         {navigation.map((item) => {
@@ -159,37 +159,45 @@ const DashboardLayout: React.FC = () => {
                                     key={item.name}
                                     to={item.href}
                                     onClick={() => setIsSidebarOpen(false)}
-                                    className={`group flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 ${isActive
-                                        ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                                        : 'text-foreground/70 hover:bg-muted hover:text-primary hover:pl-5'
+                                    className={`group flex items-center px-4 py-3 text-sm font-semibold rounded-xl transition-all duration-300 relative overflow-hidden ${isActive
+                                        ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/25 translate-x-1'
+                                        : 'text-foreground/60 hover:bg-muted/80 hover:text-primary hover:translate-x-1'
                                         }`}
                                 >
-                                    <item.icon className={`mr-3 h-5 w-5 transition-colors ${isActive ? 'text-primary-foreground' : 'text-muted-foreground group-hover:text-primary'}`} />
-                                    {item.name}
-                                    {isActive && <ChevronRight className="ml-auto h-4 w-4 opacity-50" />}
+                                    <item.icon className={`mr-3 h-5 w-5 transition-all duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`} />
+                                    <span className="relative z-10">{item.name}</span>
+                                    {isActive && (
+                                        <div className="ml-auto flex items-center">
+                                            <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground/50 animate-pulse mr-2" />
+                                            <ChevronRight className="h-4 w-4 opacity-50" />
+                                        </div>
+                                    )}
                                 </Link>
                             );
                         })}
                     </nav>
 
-                    {/* User Profile / Logout */}
-                    <div className="p-4 border-t border-border bg-card/50 backdrop-blur-md">
-                        <div className="flex items-center mb-4 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                            <img
-                                src={user?.avatar || 'https://ui-avatars.com/api/?name=User'}
-                                alt="User"
-                                className="h-10 w-10 rounded-full border-2 border-primary/20"
-                            />
+                    {/* User Profile / Logout - Stationary Bottom */}
+                    <div className="mt-auto p-4 border-t border-border bg-muted/30 backdrop-blur-xl">
+                        <div className="flex items-center mb-4 p-2.5 rounded-xl bg-background/50 border border-border/50 group cursor-pointer transition-all hover:border-primary/30">
+                            <div className="relative">
+                                <img
+                                    src={user?.avatar || 'https://ui-avatars.com/api/?name=User'}
+                                    alt="User"
+                                    className="h-10 w-10 rounded-xl border-2 border-primary/10 object-cover"
+                                />
+                                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 border-2 border-card" />
+                            </div>
                             <div className="ml-3 overflow-hidden">
-                                <Link to="/profile" className="hover:underline">
-                                    <p className="text-sm font-bold text-foreground truncate">{user?.name}</p>
+                                <Link to="/profile" className="block">
+                                    <p className="text-xs font-black text-foreground truncate group-hover:text-primary transition-colors">{user?.name}</p>
+                                    <p className="text-[10px] font-medium text-muted-foreground truncate opacity-70">{user?.email}</p>
                                 </Link>
-                                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                             </div>
                         </div>
                         <button
                             onClick={logout}
-                            className="w-full flex items-center justify-center px-4 py-2.5 border border-transparent rounded-lg text-sm font-medium text-destructive bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground transition-all duration-200"
+                            className="w-full h-11 flex items-center justify-center px-4 rounded-xl text-sm font-bold text-destructive bg-destructive/5 border border-destructive/10 hover:bg-destructive hover:text-white hover:shadow-lg hover:shadow-destructive/20 transition-all duration-300"
                         >
                             <LogOut className="mr-2 h-4 w-4" />
                             Cerrar Sesión
@@ -198,29 +206,34 @@ const DashboardLayout: React.FC = () => {
                 </div>
             </aside>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col overflow-hidden relative">
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col min-w-0 lg:pl-72">
                 {/* Header */}
-                <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border shadow-sm">
-                    <div className="px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-                        <button
-                            onClick={toggleSidebar}
-                            className="lg:hidden p-2 rounded-md text-foreground/70 hover:text-foreground hover:bg-muted focus:outline-none transition-colors"
-                        >
-                            <Menu className="h-6 w-6" />
-                        </button>
+                <header className="sticky top-0 z-40 w-full bg-background/60 backdrop-blur-xl border-b border-border/50 shadow-sm">
+                    <div className="px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center h-16">
+                        <div className="flex items-center">
+                            <button
+                                onClick={toggleSidebar}
+                                className="lg:hidden p-2 -ml-2 rounded-xl text-foreground/70 hover:text-primary hover:bg-primary/5 transition-all"
+                            >
+                                <Menu className="h-6 w-6" />
+                            </button>
 
-                        {/* Title or Breadcrumb (Optional) */}
-                        <div className="hidden md:block">
-                            <h1 className="text-xl font-bold text-foreground bg-gradient-to-r from-primary to-red-800 bg-clip-text text-transparent">
-                                {navigation.find(n => n.href === location.pathname)?.name || 'Aniquem'}
-                            </h1>
+                            {/* Title - Visible on Desktop */}
+                            <div className="hidden lg:flex items-center ml-2">
+                                <div className="h-6 w-1 bg-primary rounded-full mr-4" />
+                                <h1 className="text-lg font-black tracking-tight text-foreground uppercase">
+                                    {navigation.find(n => n.href === location.pathname)?.name || 'Aniquem'}
+                                </h1>
+                            </div>
                         </div>
 
-                        <div className="flex-1 flex justify-end items-center space-x-4">
+                        <div className="flex-1 flex justify-end items-center space-x-2 sm:space-x-4">
+                            <div className="h-8 w-px bg-border/50 mx-2 hidden sm:block" />
+
                             <button
                                 onClick={toggleTheme}
-                                className="p-2 rounded-full text-foreground/70 hover:text-primary hover:bg-muted transition-all duration-200"
+                                className="p-2.5 rounded-xl text-foreground/60 hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/10 transition-all duration-300"
                                 aria-label="Toggle Theme"
                             >
                                 {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}

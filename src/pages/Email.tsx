@@ -304,61 +304,61 @@ const Email: React.FC = () => {
     return (
         <div className="h-full flex flex-col bg-card rounded-lg shadow overflow-hidden relative border border-border">
             {/* Email Toolbar */}
-            <div className="p-4 border-b border-border space-y-4 bg-muted/30">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-4 flex-1 mr-4">
-                        <h2 className="text-xl font-semibold text-foreground">Correo Interno</h2>
-                        <div className="relative rounded-md shadow-sm flex-1 max-w-md">
+            <div className="p-3 sm:p-4 border-b border-border space-y-4 bg-muted/30">
+                <div className="flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center">
+                    <div className="flex items-center space-x-3 flex-1">
+                        <h2 className="text-lg sm:text-xl font-bold text-foreground whitespace-nowrap">Correo</h2>
+                        <div className="relative rounded-xl shadow-sm flex-1 max-w-md">
                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <Search className="h-4 w-4 text-muted-foreground" />
                             </div>
                             <input
                                 type="text"
-                                className="block w-full bg-background border-input rounded-md pl-10 sm:text-sm py-2 border focus:ring-ring focus:border-ring text-foreground placeholder:text-muted-foreground"
-                                placeholder="Buscar en el correo..."
+                                className="block w-full bg-background border-border rounded-xl pl-10 text-xs sm:text-sm py-2 px-3 border focus:ring-primary focus:border-primary text-foreground placeholder:text-muted-foreground transition-all"
+                                placeholder="Buscar..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex items-center justify-between sm:justify-end space-x-2">
                         <button
                             onClick={fetchEmailData}
                             disabled={isLoading}
-                            className="inline-flex items-center px-3 py-2 border border-border rounded-md text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-50"
-                            title="Sincronizar con Google Sheets"
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-border rounded-xl text-xs font-bold text-foreground bg-background hover:bg-muted transition-all disabled:opacity-50 shadow-sm"
+                            title="Sincronizar"
                         >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`h-3.5 w-3.5 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                             Sincronizar
                         </button>
                         <button
                             onClick={() => setIsComposeOpen(true)}
-                            className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 transition-colors flex items-center shadow-sm"
+                            className="flex-1 sm:flex-none bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-bold hover:bg-primary/90 transition-all flex items-center justify-center shadow-lg shadow-primary/20"
                         >
-                            <Send className="h-4 w-4 mr-2" />
+                            <Send className="h-3.5 w-3.5 mr-2" />
                             Redactar
                         </button>
                     </div>
                 </div>
 
-                {/* Filter Chips */}
+                {/* Filter Chips - Scrollable on Mobile */}
                 {!selectedEmail && selectedTab === 'inbox' && (
-                    <div className="flex items-center space-x-2 pb-1">
+                    <div className="flex items-center space-x-2 pb-1 overflow-x-auto no-scrollbar mask-fade-right">
                         <button
                             onClick={() => setFilterStatus('all')}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'all' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${filterStatus === 'all' ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
                         >
                             Todos
                         </button>
                         <button
                             onClick={() => setFilterStatus('unread')}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'unread' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${filterStatus === 'unread' ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
                         >
                             No leídos ({emails.filter(e => (e.folder === 'inbox' || !e.folder) && !e.read && !e.deleted).length})
                         </button>
                         <button
                             onClick={() => setFilterStatus('starred')}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${filterStatus === 'starred' ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
+                            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${filterStatus === 'starred' ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20' : 'bg-background text-muted-foreground border border-border hover:bg-muted'}`}
                         >
                             Destacados
                         </button>
@@ -367,37 +367,34 @@ const Email: React.FC = () => {
             </div>
 
             <div className="flex-1 flex overflow-hidden">
-                {/* Sidebar */}
-                <div className="w-48 bg-muted/10 border-r border-border flex flex-col py-4 hidden md:flex">
+                {/* Desktop Sidebar */}
+                <div className="w-56 bg-muted/5 border-r border-border flex flex-col py-6 hidden lg:flex">
                     <button
                         onClick={() => { setSelectedTab('inbox'); setSelectedEmail(null); }}
-                        className={`flex items-center px-6 py-2 text-sm font-medium text-left transition-colors ${selectedTab === 'inbox' ? 'bg-background text-primary border-l-4 border-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                        className={`flex items-center px-6 py-3 text-sm font-bold transition-all relative ${selectedTab === 'inbox' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:pl-7'}`}
                     >
-                        <Inbox className="h-4 w-4 mr-3" />
+                        {selectedTab === 'inbox' && <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
+                        <Inbox className={`h-5 w-5 mr-3 transition-transform ${selectedTab === 'inbox' ? 'scale-110' : ''}`} />
                         Recibidos
-                        <span className="ml-auto bg-primary text-primary-foreground text-xs rounded-full px-2 py-0.5">
+                        <span className={`ml-auto text-[10px] font-black rounded-lg px-2 py-0.5 ${selectedTab === 'inbox' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                             {emails.filter(e => (e.folder === 'inbox' || !e.folder) && !e.read && !e.deleted).length}
                         </span>
                     </button>
                     <button
                         onClick={() => { setSelectedTab('sent'); setSelectedEmail(null); }}
-                        className={`flex items-center px-6 py-2 text-sm font-medium text-left transition-colors ${selectedTab === 'sent' ? 'bg-background text-primary border-l-4 border-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                        className={`flex items-center px-6 py-3 text-sm font-bold transition-all relative ${selectedTab === 'sent' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:pl-7'}`}
                     >
-                        <Send className="h-4 w-4 mr-3" />
+                        {selectedTab === 'sent' && <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
+                        <Send className={`h-5 w-5 mr-3 transition-transform ${selectedTab === 'sent' ? 'scale-110' : ''}`} />
                         Enviados
-                        <span className="ml-auto bg-muted text-muted-foreground text-xs rounded-full px-2 py-0.5">
-                            {emails.filter(e => e.folder === 'sent').length}
-                        </span>
                     </button>
                     <button
                         onClick={() => { setSelectedTab('trash'); setSelectedEmail(null); }}
-                        className={`flex items-center px-6 py-2 text-sm font-medium text-left transition-colors ${selectedTab === 'trash' ? 'bg-background text-primary border-l-4 border-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                        className={`flex items-center px-6 py-3 text-sm font-bold transition-all relative ${selectedTab === 'trash' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:pl-7'}`}
                     >
-                        <Trash2 className="h-4 w-4 mr-3" />
+                        {selectedTab === 'trash' && <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
+                        <Trash2 className={`h-5 w-5 mr-3 transition-transform ${selectedTab === 'trash' ? 'scale-110' : ''}`} />
                         Papelera
-                        <span className="ml-auto bg-muted text-muted-foreground text-xs rounded-full px-2 py-0.5">
-                            {emails.filter(e => e.folder === 'trash' || e.deleted).length}
-                        </span>
                     </button>
                 </div>
 
@@ -555,46 +552,78 @@ const Email: React.FC = () => {
                 </div>
             </div>
 
-            {/* Compose Modal */}
-            {isComposeOpen && (
-                <div className="fixed inset-0 sm:inset-auto sm:fixed sm:bottom-0 sm:right-10 w-full sm:w-[600px] h-full sm:h-[600px] sm:max-h-[90vh] bg-card sm:rounded-t-lg shadow-2xl border border-border z-50 flex flex-col">
-                    <div className="px-4 py-3 bg-primary rounded-t-lg flex justify-between items-center shrink-0">
-                        <h3 className="text-base font-medium text-primary-foreground">Mensaje Nuevo</h3>
-                        <div className="flex items-center space-x-2">
-                            <button className="text-primary-foreground/80 hover:text-primary-foreground sm:hidden">
-                                <span className="sr-only">Minimizar</span>
-                                _
-                            </button>
-                            <button onClick={() => setIsComposeOpen(false)} className="text-primary-foreground/80 hover:text-primary-foreground">
-                                <X className="h-5 w-5" />
-                            </button>
+            {/* Mobile Bottom Navigation for Folder Switching */}
+            {!selectedEmail && (
+                <div className="lg:hidden h-16 border-t border-border bg-card flex justify-around items-center shrink-0">
+                    <button
+                        onClick={() => setSelectedTab('inbox')}
+                        className={`flex flex-col items-center justify-center space-y-1 transition-all ${selectedTab === 'inbox' ? 'text-primary scale-105' : 'text-muted-foreground opacity-60'}`}
+                    >
+                        <div className="relative">
+                            <Inbox className="h-6 w-6" />
+                            {emails.filter(e => (e.folder === 'inbox' || !e.folder) && !e.read && !e.deleted).length > 0 && (
+                                <span className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-primary text-primary-foreground text-[8px] font-black rounded-full flex items-center justify-center">
+                                    {emails.filter(e => (e.folder === 'inbox' || !e.folder) && !e.read && !e.deleted).length}
+                                </span>
+                            )}
                         </div>
+                        <span className="text-[10px] font-bold">Inbox</span>
+                    </button>
+                    <button
+                        onClick={() => setSelectedTab('sent')}
+                        className={`flex flex-col items-center justify-center space-y-1 transition-all ${selectedTab === 'sent' ? 'text-primary scale-105' : 'text-muted-foreground opacity-60'}`}
+                    >
+                        <Send className="h-6 w-6" />
+                        <span className="text-[10px] font-bold">Sent</span>
+                    </button>
+                    <button
+                        onClick={() => setSelectedTab('trash')}
+                        className={`flex flex-col items-center justify-center space-y-1 transition-all ${selectedTab === 'trash' ? 'text-primary scale-105' : 'text-muted-foreground opacity-60'}`}
+                    >
+                        <Trash2 className="h-6 w-6" />
+                        <span className="text-[10px] font-bold">Trash</span>
+                    </button>
+                </div>
+            )}
+
+            {/* Compose Modal - Enhanced for Mobile */}
+            {isComposeOpen && (
+                <div className="fixed inset-0 sm:inset-auto sm:fixed sm:bottom-0 sm:right-10 w-full lg:w-[600px] h-full lg:min-h-[400px] lg:max-h-[600px] bg-card lg:rounded-t-2xl shadow-2xl border border-border z-50 flex flex-col animate-in slide-in-from-bottom-6 duration-300">
+                    <div className="px-5 py-4 bg-primary text-primary-foreground lg:rounded-t-2xl flex justify-between items-center shrink-0 shadow-lg">
+                        <h3 className="text-sm font-black uppercase tracking-widest">Mensaje Nuevo</h3>
+                        <button onClick={() => setIsComposeOpen(false)} className="p-2 -mr-2 bg-white/10 rounded-full hover:bg-white/20 transition-all">
+                            <X className="h-5 w-5" />
+                        </button>
                     </div>
-                    <form onSubmit={handleSend} className="flex-1 flex flex-col p-4 space-y-3 bg-card overflow-y-auto">
-                        <div className="space-y-2">
-                            <input
-                                className="block w-full bg-background border-b border-border focus:border-ring focus:ring-0 text-sm py-2 px-0 text-foreground"
-                                placeholder="Para"
-                                required
-                                value={newEmail.to}
-                                onChange={(e) => setNewEmail({ ...newEmail, to: e.target.value })}
-                            />
-                            <input
-                                className="block w-full bg-background border-b border-border focus:border-ring focus:ring-0 text-sm py-2 px-0 text-foreground"
-                                placeholder="Asunto"
-                                required
-                                value={newEmail.subject}
-                                onChange={(e) => setNewEmail({ ...newEmail, subject: e.target.value })}
-                            />
+                    <form onSubmit={handleSend} className="flex-1 flex flex-col p-6 space-y-4 bg-background overflow-y-auto">
+                        <div className="space-y-4">
+                            <div className="group relative">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground absolute -top-2 left-0 transition-all group-focus-within:text-primary">Para</label>
+                                <input
+                                    className="block w-full bg-transparent border-b border-border focus:border-primary focus:ring-0 text-sm py-2 px-0 text-foreground transition-all"
+                                    required
+                                    value={newEmail.to}
+                                    onChange={(e) => setNewEmail({ ...newEmail, to: e.target.value })}
+                                />
+                            </div>
+                            <div className="group relative pt-4">
+                                <label className="text-[10px] font-black uppercase text-muted-foreground absolute top-2 left-0 transition-all group-focus-within:text-primary">Asunto</label>
+                                <input
+                                    className="block w-full bg-transparent border-b border-border focus:border-primary focus:ring-0 text-sm py-2 px-0 text-foreground transition-all"
+                                    required
+                                    value={newEmail.subject}
+                                    onChange={(e) => setNewEmail({ ...newEmail, subject: e.target.value })}
+                                />
+                            </div>
                         </div>
 
                         {/* Rich Text Toolbar Simulation */}
-                        <div className="flex items-center space-x-2 border-b border-border pb-2 mb-2">
-                            <button type="button" className="p-1 hover:bg-muted rounded text-muted-foreground font-bold">B</button>
-                            <button type="button" className="p-1 hover:bg-muted rounded text-muted-foreground italic">I</button>
-                            <button type="button" className="p-1 hover:bg-muted rounded text-muted-foreground underline">U</button>
+                        <div className="flex items-center space-x-2 border-b border-border/50 pb-3 h-10 overflow-x-auto no-scrollbar">
+                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black">B</button>
+                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black italic">I</button>
+                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black underline">U</button>
                             <div className="h-4 w-px bg-border mx-2"></div>
-                            <button type="button" className="p-1 hover:bg-muted rounded text-muted-foreground" title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
+                            <button type="button" className="p-2 hover:bg-primary/5 rounded-xl text-primary transition-all" title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
                                 <Paperclip className="h-4 w-4" />
                             </button>
                             <input
@@ -604,27 +633,26 @@ const Email: React.FC = () => {
                                 multiple
                                 onChange={handleFileChange}
                             />
-                            <button type="button" className="p-1 hover:bg-muted rounded text-muted-foreground" title="Insertar imagen">
+                            <button type="button" className="p-2 hover:bg-primary/5 rounded-xl text-primary transition-all" title="Insertar imagen">
                                 <ImageIcon className="h-4 w-4" />
                             </button>
                         </div>
 
                         <textarea
-                            className="flex-1 w-full bg-background border-0 focus:ring-0 text-sm p-2 resize-none text-foreground leading-relaxed"
+                            className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-sm p-0 resize-none text-foreground leading-relaxed custom-scrollbar min-h-[150px]"
                             placeholder="Escribe tu mensaje aquí..."
                             required
                             value={newEmail.message}
                             onChange={(e) => setNewEmail({ ...newEmail, message: e.target.value })}
                         />
 
-                        {/* Attachments Preview inside Modal */}
+                        {/* Attachments Preview */}
                         {attachments.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-border">
+                            <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
                                 {attachments.map((file, idx) => (
-                                    <div key={idx} className="flex items-center text-xs bg-muted text-foreground px-2 py-1 rounded-md border border-border">
-                                        <span className="truncate max-w-[150px]">{file.name}</span>
-                                        <span className="ml-1 text-muted-foreground">({(file.size / 1024).toFixed(0)}KB)</span>
-                                        <button type="button" onClick={() => removeAttachment(idx)} className="ml-2 text-muted-foreground hover:text-destructive">
+                                    <div key={idx} className="flex items-center text-[10px] font-bold bg-primary/5 text-primary border border-primary/20 px-3 py-1.5 rounded-full">
+                                        <span className="truncate max-w-[120px]">{file.name}</span>
+                                        <button type="button" onClick={() => removeAttachment(idx)} className="ml-2 hover:text-destructive">
                                             <X className="h-3 w-3" />
                                         </button>
                                     </div>
@@ -632,14 +660,15 @@ const Email: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="flex justify-between items-center pt-4 mt-auto border-t border-border">
+                        <div className="flex justify-between items-center pt-6 mt-auto border-t border-border">
                             <button
                                 type="submit"
-                                className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none transition-colors"
+                                className="inline-flex items-center px-8 h-12 border border-transparent text-sm font-black uppercase tracking-widest rounded-xl shadow-lg shadow-primary/25 text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none transition-all"
                             >
+                                <Send className="h-4 w-4 mr-2" />
                                 Enviar
                             </button>
-                            <button type="button" onClick={() => setIsComposeOpen(false)} className="text-muted-foreground hover:text-foreground transition-colors p-2 hover:bg-muted rounded-full">
+                            <button type="button" onClick={() => setIsComposeOpen(false)} className="text-destructive hover:bg-destructive/5 transition-all p-3 rounded-xl border border-transparent hover:border-destructive/10">
                                 <Trash2 className="h-5 w-5" />
                             </button>
                         </div>

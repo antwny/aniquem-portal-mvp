@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin, Calendar as CalendarIcon } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
 import { EmailService } from '../services/EmailService';
@@ -212,6 +212,20 @@ const Calendar: React.FC = () => {
         return (dayNumber > 0 && dayNumber <= daysInMonth) ? dayNumber : null;
     });
 
+    // Sidebar: Upcoming Events Logic
+    const upcomingEvents = [...events].filter(e => {
+        const eventDate = new Date(e.year, e.month, e.day);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return eventDate >= today;
+    }).sort((a, b) => {
+        const dateA = new Date(a.year, a.month, a.day);
+        const dateB = new Date(b.year, b.month, b.day);
+        if (dateA.getTime() !== dateB.getTime()) return dateA.getTime() - dateB.getTime();
+        return a.time.localeCompare(b.time);
+    }).slice(0, 6); // Just show next 6 events for clarity
+
+
     return (
         <div className="h-full flex flex-col space-y-4">
             <div className="flex justify-between items-center">
@@ -225,69 +239,135 @@ const Calendar: React.FC = () => {
                 </button>
             </div>
 
-            <div className="flex-1 flex flex-col bg-card rounded-lg shadow overflow-hidden border border-border">
-                {/* Calendar Header */}
-                <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
-                    <h2 className="text-lg font-bold text-foreground capitalize">{monthName}</h2>
-                    <div className="flex space-x-2">
-                        <button onClick={prevMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
-                            <ChevronLeft className="h-5 w-5" />
-                        </button>
-                        <button onClick={nextMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
-                            <ChevronRight className="h-5 w-5" />
-                        </button>
+            <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
+                {/* Main Calendar Space */}
+                <div className="flex-1 flex flex-col bg-card rounded-lg shadow overflow-hidden border border-border">
+                    {/* Calendar Header */}
+                    <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
+                        <h2 className="text-lg font-bold text-foreground capitalize">{monthName}</h2>
+                        <div className="flex space-x-2">
+                            <button onClick={prevMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
+                                <ChevronLeft className="h-5 w-5" />
+                            </button>
+                            <button onClick={nextMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
+                                <ChevronRight className="h-5 w-5" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Calendar Grid */}
+                    <div className="grid grid-cols-7 border-b border-border bg-muted/30">
+                        {days.map(day => (
+                            <div key={day} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                {day}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="flex-1 grid grid-cols-7 grid-rows-6 divide-x divide-y divide-border overflow-y-auto lg:overflow-visible">
+                        {calendarDays.map((day, i) => {
+                            const isToday = day === new Date().getDate() &&
+                                currentDate.getMonth() === new Date().getMonth() &&
+                                currentDate.getFullYear() === new Date().getFullYear();
+
+                            const dayEvents = events.filter(e =>
+                                e.day === day &&
+                                e.month === currentDate.getMonth() &&
+                                e.year === currentDate.getFullYear()
+                            );
+
+                            return (
+                                <div key={i} className={`min-h-[100px] bg-card p-2 ${!day ? 'bg-muted/10' : ''} hover:bg-muted/20 transition-colors`}>
+                                    {day && (
+                                        <div className="h-full flex flex-col">
+                                            <div className="flex justify-between items-start">
+                                                <span className={`text-sm font-medium h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'}`}>
+                                                    {day}
+                                                </span>
+                                                {dayEvents.length > 0 && <span className="text-xs text-muted-foreground">{dayEvents.length} eventos</span>}
+                                            </div>
+
+                                            <div className="mt-2 space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
+                                                {dayEvents.map((event) => (
+                                                    <div
+                                                        key={event.id}
+                                                        onClick={(e) => { e.stopPropagation(); setSelectedEvent(event); }}
+                                                        className={`text-xs px-2 py-1 rounded border-l-2 ${event.color} border-current opacity-90 hover:opacity-100 cursor-pointer shadow-sm`}
+                                                    >
+                                                        <p className="font-semibold truncate">{event.title}</p>
+                                                        {event.time && <p className="opacity-75 flex items-center scale-90 origin-left"><Clock className="h-3 w-3 mr-1" />{event.time}</p>}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
-                {/* Calendar Grid */}
-                <div className="grid grid-cols-7 border-b border-border bg-muted/30">
-                    {days.map(day => (
-                        <div key={day} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            {day}
+                {/* Agenda Sidebar */}
+                <div className="w-full lg:w-80 flex flex-col space-y-4">
+                    <div className="bg-card rounded-lg shadow-sm border border-border p-4 flex flex-col h-full overflow-hidden">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-foreground">Próximos Eventos</h3>
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="p-1 hover:bg-muted rounded-full"
+                            >
+                                <Plus className="h-5 w-5 text-primary" />
+                            </button>
                         </div>
-                    ))}
-                </div>
 
-                <div className="flex-1 grid grid-cols-7 grid-rows-6 divide-x divide-y divide-border">
-                    {calendarDays.map((day, i) => {
-                        const isToday = day === new Date().getDate() &&
-                            currentDate.getMonth() === new Date().getMonth() &&
-                            currentDate.getFullYear() === new Date().getFullYear();
-
-                        const dayEvents = events.filter(e =>
-                            e.day === day &&
-                            e.month === currentDate.getMonth() &&
-                            e.year === currentDate.getFullYear()
-                        );
-
-                        return (
-                            <div key={i} className={`min-h-[100px] bg-card p-2 ${!day ? 'bg-muted/10' : ''} hover:bg-muted/20 transition-colors`}>
-                                {day && (
-                                    <div className="h-full flex flex-col">
-                                        <div className="flex justify-between items-start">
-                                            <span className={`text-sm font-medium h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'}`}>
-                                                {day}
+                        <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+                            {upcomingEvents.length > 0 ? (
+                                upcomingEvents.map((event) => (
+                                    <div
+                                        key={event.id}
+                                        onClick={() => setSelectedEvent(event)}
+                                        className="group cursor-pointer p-3 rounded-xl border border-border bg-muted/5 hover:bg-muted/20 hover:border-primary/30 transition-all"
+                                    >
+                                        <div className="flex items-start justify-between">
+                                            <div className={`p-2 rounded-lg ${event.color.split(' ')[0]} bg-opacity-20`}>
+                                                <CalendarIcon className={`h-4 w-4 ${event.color.split(' ')[1]}`} />
+                                            </div>
+                                            <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-70">
+                                                {new Date(event.year, event.month, event.day).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
                                             </span>
-                                            {dayEvents.length > 0 && <span className="text-xs text-muted-foreground">{dayEvents.length} eventos</span>}
                                         </div>
-
-                                        <div className="mt-2 space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
-                                            {dayEvents.map((event) => (
-                                                <div
-                                                    key={event.id}
-                                                    onClick={(e) => { e.stopPropagation(); setSelectedEvent(event); }}
-                                                    className={`text-xs px-2 py-1 rounded border-l-2 ${event.color} border-current opacity-90 hover:opacity-100 cursor-pointer shadow-sm`}
-                                                >
-                                                    <p className="font-semibold truncate">{event.title}</p>
-                                                    {event.time && <p className="opacity-75 flex items-center scale-90 origin-left"><Clock className="h-3 w-3 mr-1" />{event.time}</p>}
-                                                </div>
-                                            ))}
+                                        <div className="mt-3">
+                                            <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors underline-offset-4 decoration-primary/30 truncate">
+                                                {event.title}
+                                            </h4>
+                                            <div className="flex items-center mt-1 text-xs text-muted-foreground space-x-3">
+                                                <span className="flex items-center"><Clock className="h-3 w-3 mr-1" />{event.time}</span>
+                                                {event.location && <span className="flex items-center truncate max-w-[100px]"><MapPin className="h-3 w-3 mr-1" />{event.location}</span>}
+                                            </div>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                                ))
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-center p-6 bg-muted/5 rounded-xl border border-dashed border-border mt-4">
+                                    <div className="h-12 w-12 bg-muted rounded-full flex items-center justify-center mb-4">
+                                        <CalendarIcon className="h-6 w-6 text-muted-foreground/50" />
+                                    </div>
+                                    <h4 className="text-sm font-medium text-muted-foreground">No hay eventos próximos</h4>
+                                    <p className="text-[10px] text-muted-foreground mt-1 opacity-70">Empieza agendando tu primera reunión con un aliado.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-border">
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="w-full py-2 px-4 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground rounded-lg text-sm font-bold transition-all flex items-center justify-center"
+                            >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Agendar Nuevo
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
