@@ -232,9 +232,11 @@ const Email: React.FC = () => {
         // 2. Try to send via EmailJS
         const templateParams = {
             to_email: newEmail.to,
+            email_to: newEmail.to,
+            to_name: newEmail.to,
             subject: newEmail.subject,
             message: newEmail.message,
-            from_name: "Aniquem Portal User"
+            from_name: "Aniquem Portal System"
         };
 
         // We import dynamically or use the service we created

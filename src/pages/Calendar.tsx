@@ -184,6 +184,8 @@ const Calendar: React.FC = () => {
             // Try real send
             EmailService.sendEmail({
                 to_email: guestEmail,
+                email_to: guestEmail,
+                to_name: guestEmail,
                 subject: `Invitación a Aliado: ${newEvent.title}`,
                 message: `Estimado/a,\n\nNos complace invitarlo al siguiente evento:\n\nEvento: ${newEvent.title}\nFecha: ${newEvent.day} de ${monthName}\nHora: ${newEvent.time}\nLugar: ${newEvent.location || 'Por definir'}\n\nEsperamos contar con su presencia.\n\nAtentamente,\nEquipo Aniquem`,
                 from_name: "Aniquem Events"
@@ -249,6 +251,8 @@ const Calendar: React.FC = () => {
             // Real Cancellation Email
             EmailService.sendEmail({
                 to_email: selectedEvent.guestEmail,
+                email_to: selectedEvent.guestEmail,
+                to_name: selectedEvent.guestEmail,
                 subject: `CANCELACIÓN: ${selectedEvent.title}`,
                 message: `Estimado/a,\n\nLamentamos informarle que el evento ${selectedEvent.title} programado para el ${selectedEvent.day} de ${monthName} ha sido cancelado.\n\nDisculpe las molestias.\n\nAtentamente,\nEquipo Aniquem`,
                 from_name: "Aniquem Events"
