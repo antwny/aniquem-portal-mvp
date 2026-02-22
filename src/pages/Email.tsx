@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Star, Send, Inbox, Trash2, X, Paperclip, Image as ImageIcon, MoreVertical, ArrowLeft, Reply, Forward, Calendar, RefreshCw } from 'lucide-react';
+import { Search, Star, Send, Inbox, Trash2, X, Paperclip, MoreVertical, ArrowLeft, Reply, Forward, Calendar, RefreshCw, FileText, User } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { EmailService } from '../services/EmailService';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 
 interface Attachment {
     name: string;
@@ -23,9 +25,10 @@ interface EmailRecord {
     read: boolean;
     label?: string;
     deleted?: boolean;
-    folder: 'inbox' | 'sent' | 'trash';
+    folder: 'inbox' | 'sent' | 'trash' | 'drafts';
     recipient?: string; // Recipient for sent emails
     to?: string;        // Fallback or legacy field
+    isHTML?: boolean;   // Whether the body is HTML (from Quill)
     attachments?: Attachment[];
 }
 
@@ -103,7 +106,7 @@ const mockEmails: EmailRecord[] = [
 
 const Email: React.FC = () => {
     const { user } = useAuth();
-    const [selectedTab, setSelectedTab] = useState<'inbox' | 'sent' | 'trash'>('inbox');
+    const [selectedTab, setSelectedTab] = useState<'inbox' | 'sent' | 'trash' | 'drafts'>('inbox');
     const [filterStatus, setFilterStatus] = useState<'all' | 'unread' | 'starred'>('all');
     const [emails, setEmails] = useLocalStorage<EmailRecord[]>('aniquem-emails', mockEmails);
     const [alianzas] = useLocalStorage<Alianza[]>('aniquem-alianzas', []);
@@ -113,9 +116,15 @@ const Email: React.FC = () => {
     const [newEmail, setNewEmail] = useState({ to: '', subject: '', message: '' });
     const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [attachments, setAttachments] = useState<File[]>([]);
+    const [attachments, setAttachments] = useState<any[]>([]);
     const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
     const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
+
+    // New Advanced Features State
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [isContactDirectoryOpen, setIsContactDirectoryOpen] = useState(false);
+    const [drafts, setDrafts] = useLocalStorage<EmailRecord[]>('aniquem-email-drafts', []);
+    const [lastAutoSave, setLastAutoSave] = useState<number>(Date.now());
 
     const templates = [
         {
@@ -328,6 +337,7 @@ const Email: React.FC = () => {
             folder: 'sent',
             recipient: newEmail.to,
             to: newEmail.to,
+            isHTML: true,
             attachments: attachments.map(file => ({
                 name: file.name,
                 size: (file.size / 1024).toFixed(1) + " KB",
@@ -380,13 +390,20 @@ const Email: React.FC = () => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
-            setAttachments(prev => [...prev, ...Array.from(e.target.files || [])]);
+            const newFiles = Array.from(e.target.files).map(file => ({
+                name: file.name,
+                size: (file.size / (1024 * 1024)).toFixed(1) + " MB",
+                type: file.type.split('/')[1] || 'file'
+            }));
+            setAttachments(prev => [...prev, ...newFiles]);
+            toast.success(`${newFiles.length} archivos adjuntos`);
         }
     };
 
     const removeAttachment = (index: number) => {
         setAttachments(prev => prev.filter((_, i) => i !== index));
     };
+
 
     const filteredEmails = emails.filter(email => {
         if (selectedTab === 'trash') return email.folder === 'trash' || email.deleted;
@@ -430,6 +447,38 @@ const Email: React.FC = () => {
 
         return () => clearInterval(interval);
     }, []);
+
+    // Auto-save draft every 10 seconds
+    useEffect(() => {
+        const autoSaveTimer = setInterval(() => {
+            if (isComposeOpen && (newEmail.to || newEmail.subject || newEmail.message)) {
+                const currentDraft: EmailRecord = {
+                    id: 999999, // Temporary ID for current active draft
+                    sender: user?.email || "Yo",
+                    senderName: user?.name || "Colaborador",
+                    subject: newEmail.subject || "(Sin Asunto)",
+                    preview: (newEmail.message || "").replace(/<[^>]*>?/gm, '').substring(0, 50) + "...",
+                    body: newEmail.message,
+                    date: "Ahora",
+                    starred: false,
+                    read: true,
+                    deleted: false,
+                    folder: 'drafts',
+                    isHTML: true,
+                    recipient: newEmail.to
+                };
+
+                // For simplicity, we can store the "active" draft in state or local storage
+                // Let's just track it in a specific 'aniquem-active-draft' if we want persistence across reloads
+                setDrafts(prev => {
+                    const others = (prev || []).filter(d => d.id !== currentDraft.id);
+                    return [currentDraft, ...others];
+                });
+                setLastAutoSave(Date.now());
+            }
+        }, 10000);
+        return () => clearInterval(autoSaveTimer);
+    }, [isComposeOpen, newEmail, user, setDrafts]);
 
     return (
         <div className="h-full flex flex-col bg-card rounded-lg shadow overflow-hidden relative border border-border">
@@ -526,11 +575,72 @@ const Email: React.FC = () => {
                         <Trash2 className={`h-5 w-5 mr-3 transition-transform ${selectedTab === 'trash' ? 'scale-110' : ''}`} />
                         Papelera
                     </button>
+                    <button
+                        onClick={() => { setSelectedTab('drafts'); setSelectedEmail(null); }}
+                        className={`flex items-center px-6 py-3 text-sm font-bold transition-all relative ${selectedTab === 'drafts' ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:pl-7'}`}
+                    >
+                        {selectedTab === 'drafts' && <div className="absolute left-0 w-1 h-6 bg-primary rounded-r-full" />}
+                        <FileText className={`h-5 w-5 mr-3 transition-transform ${selectedTab === 'drafts' ? 'scale-110' : ''}`} />
+                        Borradores
+                        <span className={`ml-auto text-[10px] font-black rounded-lg px-2 py-0.5 ${selectedTab === 'drafts' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                            {drafts.length}
+                        </span>
+                    </button>
                 </div>
 
                 {/* Email List or Detail View */}
                 <div className="flex-1 overflow-y-auto bg-background">
-                    {selectedEmail ? (
+                    {selectedTab === 'drafts' ? (
+                        <ul className="divide-y divide-border">
+                            {drafts.length > 0 ? drafts.map((draft, idx) => (
+                                <li
+                                    key={draft.id || idx}
+                                    onClick={() => {
+                                        setNewEmail({ to: draft.recipient || '', subject: draft.subject, message: draft.body || '' });
+                                        setIsComposeOpen(true);
+                                    }}
+                                    className="hover:bg-primary/5 cursor-pointer transition-colors"
+                                >
+                                    <div className="px-4 py-4 sm:px-6 flex items-center">
+                                        <div className="min-w-0 flex-1 flex items-center">
+                                            <div className="flex-shrink-0 mr-4">
+                                                <FileText className="h-5 w-5 text-primary opacity-60" />
+                                            </div>
+                                            <div className="min-w-0 flex-1 md:grid md:grid-cols-2 md:gap-4">
+                                                <div>
+                                                    <p className="text-sm font-bold text-foreground truncate">
+                                                        {draft.subject}
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground truncate">Para: {draft.recipient || '(Sin destinatario)'}</p>
+                                                </div>
+                                                <div className="hidden md:flex flex-col items-end">
+                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black">Borrador</p>
+                                                    <p className="text-[9px] text-muted-foreground opacity-60">{draft.date}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setDrafts(prev => prev.filter((_, i) => i !== idx && prev[i].id !== draft.id));
+                                                toast.error('Borrador eliminado');
+                                            }}
+                                            className="ml-4 p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive rounded-xl transition-all"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                </li>
+                            )) : (
+                                <li className="py-20 text-center flex flex-col items-center gap-4">
+                                    <div className="p-4 bg-muted rounded-full">
+                                        <FileText className="h-8 w-8 text-muted-foreground opacity-20" />
+                                    </div>
+                                    <p className="text-sm text-muted-foreground font-medium">Bandeja de borradores vacía.</p>
+                                </li>
+                            )}
+                        </ul>
+                    ) : selectedEmail ? (
                         <div className="h-full flex flex-col">
                             <div className="p-4 border-b border-border flex items-center justify-between">
                                 <div className="flex items-center">
@@ -600,7 +710,11 @@ const Email: React.FC = () => {
                                 </div>
 
                                 <div className="prose prose-sm dark:prose-invert max-w-none mb-8 whitespace-pre-wrap text-foreground">
-                                    {selectedEmail.body || selectedEmail.preview}
+                                    {selectedEmail.isHTML ? (
+                                        <div dangerouslySetInnerHTML={{ __html: selectedEmail.body || '' }} />
+                                    ) : (
+                                        selectedEmail.body || selectedEmail.preview
+                                    )}
                                 </div>
 
                                 {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
@@ -643,10 +757,32 @@ const Email: React.FC = () => {
                             {filteredEmails.map((email) => (
                                 <li
                                     key={email.id}
-                                    onClick={() => openEmail(email)}
+                                    onClick={(e) => {
+                                        if ((e.target as HTMLElement).closest('input[type="checkbox"]')) return;
+                                        openEmail(email);
+                                    }}
                                     className={`hover:bg-muted/50 cursor-pointer transition-colors ${!email.read ? 'bg-card' : 'bg-muted/10'}`}
                                 >
                                     <div className="px-4 py-4 sm:px-6 flex items-center">
+                                        <div
+                                            className="mr-3 flex-shrink-0 p-1 -m-1 cursor-default"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedIds.includes(email.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                onChange={(e) => {
+                                                    e.stopPropagation();
+                                                    if (selectedIds.includes(email.id)) {
+                                                        setSelectedIds(prev => prev.filter(id => id !== email.id));
+                                                    } else {
+                                                        setSelectedIds(prev => [...prev, email.id]);
+                                                    }
+                                                }}
+                                                className="h-4 w-4 rounded border-border text-primary focus:ring-primary bg-background shadow-sm"
+                                            />
+                                        </div>
                                         <div className="min-w-0 flex-1 flex items-center">
                                             <div className="flex-shrink-0 mr-4">
                                                 <button onClick={(e) => { e.stopPropagation(); toggleStar(email.id); }}>
@@ -741,6 +877,13 @@ const Email: React.FC = () => {
                         <Trash2 className="h-6 w-6" />
                         <span className="text-[10px] font-bold">Trash</span>
                     </button>
+                    <button
+                        onClick={() => setSelectedTab('drafts')}
+                        className={`flex flex-col items-center justify-center space-y-1 transition-all ${selectedTab === 'drafts' ? 'text-primary scale-105' : 'text-muted-foreground opacity-60'}`}
+                    >
+                        <FileText className="h-6 w-6" />
+                        <span className="text-[10px] font-bold">Drafts</span>
+                    </button>
                 </div>
             )}
 
@@ -773,7 +916,6 @@ const Email: React.FC = () => {
                                                     onClick={() => {
                                                         setNewEmail({ ...newEmail, subject: t.subject, message: t.body });
                                                         setIsTemplateMenuOpen(false);
-                                                        toast.success(`Plantilla "${t.name}" aplicada`);
                                                     }}
                                                     className="w-full text-left px-4 py-2.5 text-xs font-bold text-foreground hover:bg-primary hover:text-primary-foreground rounded-lg transition-all flex items-center justify-between group"
                                                 >
@@ -794,12 +936,55 @@ const Email: React.FC = () => {
                         <div className="space-y-4">
                             <div className="group relative">
                                 <label className="text-[10px] font-black uppercase text-muted-foreground absolute -top-2 left-0 transition-all group-focus-within:text-primary">Para</label>
-                                <input
-                                    className="block w-full bg-transparent border-b border-border focus:border-primary focus:ring-0 text-sm py-2 px-0 text-foreground transition-all"
-                                    required
-                                    value={newEmail.to}
-                                    onChange={(e) => setNewEmail({ ...newEmail, to: e.target.value })}
-                                />
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        className="block w-full bg-transparent border-b border-border focus:border-primary focus:ring-0 text-sm py-2 px-0 text-foreground transition-all"
+                                        required
+                                        value={newEmail.to}
+                                        onChange={(e) => setNewEmail({ ...newEmail, to: e.target.value })}
+                                        placeholder="correo@ejemplo.com"
+                                    />
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsContactDirectoryOpen(!isContactDirectoryOpen)}
+                                            className="p-2 bg-muted hover:bg-primary/10 hover:text-primary rounded-lg transition-all"
+                                            title="Directorio de Contactos"
+                                        >
+                                            <User className="h-4 w-4" />
+                                        </button>
+
+                                        {isContactDirectoryOpen && (
+                                            <div className="absolute top-full right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <div className="p-3 bg-muted/30 border-b border-border flex justify-between items-center px-4">
+                                                    <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Contactos de Alianzas</span>
+                                                    <button onClick={() => setIsContactDirectoryOpen(false)}><X className="h-3 w-3" /></button>
+                                                </div>
+                                                <div className="max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+                                                    {alianzas.filter(a => a.contacto_email).map(contacto => (
+                                                        <button
+                                                            key={contacto.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setNewEmail({ ...newEmail, to: contacto.contacto_email || '' });
+                                                                setIsContactDirectoryOpen(false);
+                                                            }}
+                                                            className="w-full text-left px-4 py-3 hover:bg-primary/5 rounded-lg border-b border-border/50 last:border-0 transition-all group"
+                                                        >
+                                                            <div className="text-xs font-black text-foreground group-hover:text-primary mb-0.5">{contacto.empresa}</div>
+                                                            <div className="text-[10px] text-muted-foreground truncate">{contacto.contacto_email}</div>
+                                                        </button>
+                                                    ))}
+                                                    {alianzas.filter(a => a.contacto_email).length === 0 && (
+                                                        <div className="p-6 text-center text-[10px] text-muted-foreground font-bold">
+                                                            No hay contactos con email registrados.
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                             <div className="group relative pt-4">
                                 <label className="text-[10px] font-black uppercase text-muted-foreground absolute top-2 left-0 transition-all group-focus-within:text-primary">Asunto</label>
@@ -812,34 +997,27 @@ const Email: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Rich Text Toolbar Simulation */}
-                        <div className="flex items-center space-x-2 border-b border-border/50 pb-3 h-10 overflow-x-auto no-scrollbar">
-                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black">B</button>
-                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black italic">I</button>
-                            <button type="button" className="p-1 px-2.5 bg-muted rounded-lg text-xs font-black underline">U</button>
-                            <div className="h-4 w-px bg-border mx-2"></div>
-                            <button type="button" className="p-2 hover:bg-primary/5 rounded-xl text-primary transition-all" title="Adjuntar archivo" onClick={() => fileInputRef.current?.click()}>
-                                <Paperclip className="h-4 w-4" />
-                            </button>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                multiple
-                                onChange={handleFileChange}
-                            />
-                            <button type="button" className="p-2 hover:bg-primary/5 rounded-xl text-primary transition-all" title="Insertar imagen">
-                                <ImageIcon className="h-4 w-4" />
-                            </button>
-                        </div>
 
-                        <textarea
-                            className="flex-1 w-full bg-transparent border-0 focus:ring-0 text-sm p-0 resize-none text-foreground leading-relaxed custom-scrollbar min-h-[150px]"
-                            placeholder="Escribe tu mensaje aquí..."
-                            required
-                            value={newEmail.message}
-                            onChange={(e) => setNewEmail({ ...newEmail, message: e.target.value })}
-                        />
+                        <div className="flex-1 overflow-hidden flex flex-col min-h-[300px] quill-modern">
+                            <ReactQuill
+                                theme="snow"
+                                value={newEmail.message}
+                                onChange={(content) => setNewEmail({ ...newEmail, message: content })}
+                                className="h-full flex flex-col"
+                                placeholder="Escribe tu mensaje aquí..."
+                                modules={{
+                                    toolbar: [
+                                        [{ 'header': [1, 2, 3, false] }],
+                                        ['bold', 'italic', 'underline', 'strike'],
+                                        [{ 'color': [] }, { 'background': [] }],
+                                        [{ 'align': [] }],
+                                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                        ['link', 'image'],
+                                        ['clean']
+                                    ],
+                                }}
+                            />
+                        </div>
 
                         {/* Attachments Preview */}
                         {attachments.length > 0 && (
@@ -856,13 +1034,37 @@ const Email: React.FC = () => {
                         )}
 
                         <div className="flex justify-between items-center pt-6 mt-auto border-t border-border">
-                            <button
-                                type="submit"
-                                className="inline-flex items-center px-8 h-12 border border-transparent text-sm font-black uppercase tracking-widest rounded-xl shadow-lg shadow-primary/25 text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none transition-all"
-                            >
-                                <Send className="h-4 w-4 mr-2" />
-                                Enviar
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    type="submit"
+                                    className="inline-flex items-center px-8 h-12 border border-transparent text-sm font-black uppercase tracking-widest rounded-xl shadow-lg shadow-primary/25 text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none transition-all"
+                                >
+                                    <Send className="h-4 w-4 mr-2" />
+                                    Enviar
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="p-3 bg-muted hover:bg-primary/10 hover:text-primary rounded-xl transition-all"
+                                    title="Adjuntar archivos"
+                                >
+                                    <Paperclip className="h-5 w-5" />
+                                </button>
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    multiple
+                                    onChange={handleFileChange}
+                                />
+
+                                {lastAutoSave > 0 && (
+                                    <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest animate-pulse opacity-60">
+                                        Autoguardado {new Date(lastAutoSave).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                )}
+                            </div>
                             <button type="button" onClick={() => setIsComposeOpen(false)} className="text-destructive hover:bg-destructive/5 transition-all p-3 rounded-xl border border-transparent hover:border-destructive/10">
                                 <Trash2 className="h-5 w-5" />
                             </button>
@@ -870,6 +1072,57 @@ const Email: React.FC = () => {
                     </form>
                 </div>
             )}
+            {/* Bulk Action Toolbar */}
+            {selectedIds.length > 0 && (
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 lg:bottom-10 bg-card border border-primary/20 shadow-2xl rounded-2xl px-6 py-4 flex items-center gap-6 z-[60] animate-in slide-in-from-bottom-10 duration-300 ring-1 ring-primary/10">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-black text-primary uppercase tracking-widest">{selectedIds.length} seleccionados</span>
+                    </div>
+                    <div className="h-8 w-px bg-border"></div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                const updated = emails.map(e => selectedIds.includes(e.id) ? { ...e, read: true } : e);
+                                setEmails(updated);
+                                setSelectedIds([]);
+                                toast.success('Marcados como leídos');
+                            }}
+                            className="p-2 hover:bg-primary/10 rounded-xl text-primary transition-all flex flex-col items-center gap-1 group"
+                        >
+                            <Inbox className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                            <span className="text-[9px] font-bold uppercase">Leído</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                const updated = emails.map(e => selectedIds.includes(e.id) ? { ...e, starred: true } : e);
+                                setEmails(updated);
+                                setSelectedIds([]);
+                                toast.success('Añadidos a destacados');
+                            }}
+                            className="p-2 hover:bg-yellow-500/10 rounded-xl text-yellow-500 transition-all flex flex-col items-center gap-1 group"
+                        >
+                            <Star className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                            <span className="text-[9px] font-bold uppercase">Destacar</span>
+                        </button>
+                        <button
+                            onClick={() => {
+                                const updated = emails.map(e => selectedIds.includes(e.id) ? { ...e, deleted: true, folder: 'trash' as const } : e);
+                                setEmails(updated);
+                                setSelectedIds([]);
+                                toast.error('Movidos a la papelera');
+                            }}
+                            className="p-2 hover:bg-destructive/10 rounded-xl text-destructive transition-all flex flex-col items-center gap-1 group"
+                        >
+                            <Trash2 className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                            <span className="text-[9px] font-bold uppercase">Borrar</span>
+                        </button>
+                    </div>
+                    <button onClick={() => setSelectedIds([])} className="ml-2 p-2 hover:bg-muted rounded-full">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
+
             {/* Auto-refresh indicator */}
             {isAutoRefreshing && (
                 <div className="fixed bottom-20 right-6 lg:bottom-6 bg-primary/90 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce z-50 shadow-primary/20">
@@ -882,3 +1135,127 @@ const Email: React.FC = () => {
 };
 
 export default Email;
+
+// Custom Styles for Quill and selection
+const style = document.createElement('style');
+style.textContent = `
+    .quill-modern .ql-toolbar.ql-snow {
+        border: none !important;
+        background: hsl(var(--muted) / 0.5) !important;
+        border-bottom: 2px solid hsl(var(--border)) !important;
+        border-radius: 12px 12px 0 0 !important;
+        padding: 8px 12px !important;
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+        min-height: 50px !important;
+        align-items: center !important;
+        backdrop-filter: blur(8px) !important;
+    }
+    .quill-modern .ql-toolbar.ql-snow::-webkit-scrollbar {
+        height: 4px !important;
+    }
+    .quill-modern .ql-toolbar.ql-snow::-webkit-scrollbar-thumb {
+        background: hsl(var(--primary) / 0.2) !important;
+        border-radius: 10px !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 8px !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+        min-height: 32px !important;
+        padding: 6px !important;
+        margin: 1px !important;
+        flex-shrink: 0 !important;
+        color: hsl(var(--foreground)) !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button:hover {
+        background: hsl(var(--primary) / 0.1) !important;
+        color: hsl(var(--primary)) !important;
+        transform: translateY(-1px) !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button.ql-active {
+        background: hsl(var(--primary)) !important;
+        color: hsl(var(--primary-foreground)) !important;
+        box-shadow: 0 4px 12px hsl(var(--primary) / 0.2) !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button svg {
+        width: 16px !important;
+        height: 16px !important;
+        display: block !important;
+        stroke: currentColor !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button.ql-active .ql-stroke {
+        stroke: hsl(var(--primary-foreground)) !important;
+    }
+    .quill-modern .ql-snow.ql-toolbar button.ql-active .ql-fill {
+        fill: hsl(var(--primary-foreground)) !important;
+    }
+    .quill-modern .ql-container.ql-snow {
+        border: none !important;
+        background: transparent !important;
+        font-family: inherit !important;
+        font-size: 14px !important;
+    }
+    .quill-modern .ql-editor {
+        padding: 20px !important;
+        min-height: 250px !important;
+        color: hsl(var(--foreground)) !important;
+        line-height: 1.6 !important;
+    }
+    .quill-modern .ql-editor.ql-blank::before {
+        color: hsl(var(--muted-foreground) / 0.5) !important;
+        font-style: normal !important;
+        left: 20px !important;
+    }
+    .quill-modern .ql-snow .ql-picker {
+        color: hsl(var(--foreground)) !important;
+        font-weight: 600 !important;
+        height: 32px !important;
+        margin: 1px !important;
+        flex-shrink: 0 !important;
+    }
+    .quill-modern .ql-snow .ql-picker-label {
+        padding-left: 8px !important;
+        padding-right: 20px !important;
+        border-radius: 8px !important;
+        border: 1px solid transparent !important;
+        transition: all 0.2s !important;
+        display: flex !important;
+        align-items: center !important;
+    }
+    .quill-modern .ql-snow .ql-picker-label:hover {
+        background: hsl(var(--primary) / 0.1) !important;
+        color: hsl(var(--primary)) !important;
+    }
+    .quill-modern .ql-snow .ql-picker-options {
+        background: hsl(var(--card)) !important;
+        border: 1px solid hsl(var(--border)) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+        padding: 8px !important;
+        margin-top: 4px !important;
+    }
+    .quill-modern .ql-snow .ql-picker-item {
+        color: hsl(var(--foreground)) !important;
+        padding: 8px 12px !important;
+        border-radius: 6px !important;
+        transition: all 0.2s !important;
+    }
+    .quill-modern .ql-snow .ql-picker-item:hover {
+        background: hsl(var(--primary)) !important;
+        color: hsl(var(--primary-foreground)) !important;
+    }
+    .quill-modern .ql-snow .ql-stroke {
+        stroke: currentColor !important;
+    }
+    .quill-modern .ql-snow .ql-fill {
+        fill: currentColor !important;
+    }
+`;
+document.head.appendChild(style);

@@ -165,7 +165,7 @@ const Login: React.FC = () => {
                         </div>
 
                         <div className="mt-8 text-center text-xs text-muted-foreground">
-                            <p>© 2024 Asociación de Ayuda al Niño Quemado. Todos los derechos reservados.</p>
+                            <p>© 2026 Asociación de Ayuda al Niño Quemado. Todos los derechos reservados.</p>
                         </div>
                     </div>
                 </div>
