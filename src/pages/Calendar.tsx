@@ -139,7 +139,7 @@ const Calendar: React.FC = () => {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify(event)
+                body: JSON.stringify({ ...event, action: 'CREATE', sheet: 'Calendario' })
             }).then(() => {
                 toast.info('Sincronizando...', { description: 'El evento se está guardando en Google Sheets.' });
             }).catch(err => {

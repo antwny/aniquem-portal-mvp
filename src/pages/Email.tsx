@@ -11,7 +11,7 @@ interface Attachment {
     type: string;
 }
 
-interface Email {
+interface EmailRecord {
     id: number;
     sender: string;
     subject: string;
@@ -26,7 +26,7 @@ interface Email {
     attachments?: Attachment[];
 }
 
-const mockEmails: Email[] = [
+const mockEmails: EmailRecord[] = [
     {
         id: 1,
         sender: "Voluntariado Aniquem",
@@ -92,22 +92,82 @@ const mockEmails: Email[] = [
     },
 ];
 
-// URL del CSV de Google Sheets para Correos (puede ser la misma o una diferente)
-const EMAIL_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRxPXrwBZkE3qRWOOtgbCf4KviAqr8LBN1rup3t-2EOXCMJOHaKFRXf2QqAampTEUCS9O925vYDC2Tw/pub?output=csv';
-
 const Email: React.FC = () => {
     const [selectedTab, setSelectedTab] = useState<'inbox' | 'sent' | 'trash'>('inbox');
     const [filterStatus, setFilterStatus] = useState<'all' | 'unread' | 'starred'>('all');
-    const [emails, setEmails] = useLocalStorage<Email[]>('aniquem-emails', mockEmails);
+    const [emails, setEmails] = useLocalStorage<EmailRecord[]>('aniquem-emails', mockEmails);
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isComposeOpen, setIsComposeOpen] = useState(false);
     const [newEmail, setNewEmail] = useState({ to: '', subject: '', message: '' });
-    const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+    const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachments, setAttachments] = useState<File[]>([]);
 
-    const fetchEmailData = async () => {
+    const EMAIL_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVRyUpYEdCDrSy-caeca47LZ3Op-oLADLrQe9QV1RzwkaBXuLClZEQRwREt8tQZyAfGOYvdK7c2_tA/pub?gid=700125713&single=true&output=csv';
+    const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwRJ_VEcURoeHmbdJvE1NWtQpuk6U5hSs_vP6D7T7oOkO77IqBSAwkw_ZTVp11eOoEA/exec';
+
+    const parseCSV = (text: string): string[][] => {
+        const rows: string[][] = [];
+        let currentRow: string[] = [];
+        let currentField = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+
+            if (inQuotes) {
+                if (char === '"' && nextChar === '"') {
+                    currentField += '"';
+                    i++;
+                } else if (char === '"') {
+                    inQuotes = false;
+                } else {
+                    currentField += char;
+                }
+            } else {
+                if (char === '"') {
+                    inQuotes = true;
+                } else if (char === ',') {
+                    currentRow.push(currentField.trim());
+                    currentField = '';
+                } else if (char === '\n' || char === '\r') {
+                    if (char === '\r' && nextChar === '\n') i++;
+                    currentRow.push(currentField.trim());
+                    if (currentRow.join('').length > 0) rows.push(currentRow);
+                    currentRow = [];
+                    currentField = '';
+                } else {
+                    currentField += char;
+                }
+            }
+        }
+        if (currentField || currentRow.length > 0) {
+            currentRow.push(currentField.trim());
+            if (currentRow.join('').length > 0) rows.push(currentRow);
+        }
+        return rows;
+    };
+
+    const syncWithWebhook = async (data: EmailRecord, action: 'CREATE' | 'UPDATE' | 'DELETE') => {
+        if (!WEBHOOK_URL) return;
+
+        try {
+            await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify({ ...data, action, sheet: 'Correos' })
+            });
+            toast.info('Sincronizando', { description: `Operación ${action} enviada a la nube.` });
+        } catch (error) {
+            console.error('Webhook error:', error);
+            toast.error('Error de sincronización', { description: 'La copia en la nube pudo haber fallado.' });
+        }
+    };
+
+    const fetchEmailData = async (silent = false) => {
         if (!EMAIL_SHEETS_CSV_URL) {
             toast.info('Sin URL', { description: 'Configura la URL del CSV en Email.tsx' });
             return;
@@ -123,19 +183,18 @@ const Email: React.FC = () => {
             const response = await fetch(urlWithCacheBuster, { cache: 'no-store' });
             const text = await response.text();
 
-            const rows = text.split('\n').filter(row => row.trim() !== '');
-            if (rows.length <= 1) {
-                toast.warning('Sin correos nuevos', { description: 'No se encontraron registros en el Sheets.' });
+            // Parsing robusto de CSV
+            const allRows = parseCSV(text);
+            if (allRows.length <= 1) {
+                toast.warning('Hoja vacía', { description: 'No se encontraron registros en el archivo.' });
                 return;
             }
 
-            const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+            const headers = allRows[0].map((h: string) => h.trim().toLowerCase());
 
-            // Expected headers: id, sender, subject, preview, body, date, starred, read, label, folder
-            const newEmailsFromSheet: Email[] = rows.slice(1).map((row, index) => {
-                const values = row.split(',').map(v => v.trim());
+            const newEmailsFromSheet: EmailRecord[] = allRows.slice(1).map((values: string[], index: number) => {
                 const obj: any = {};
-                headers.forEach((header, i) => {
+                headers.forEach((header: string, i: number) => {
                     obj[header] = values[i];
                 });
 
@@ -144,11 +203,11 @@ const Email: React.FC = () => {
                 const date = obj.date || obj.fecha || 'Ahora';
 
                 return {
-                    id: parseInt(obj.id) || (2000000 + index), // IDs altos para evitar conflictos con mocks
+                    id: parseInt(obj.id) || (3000000 + index),
                     sender,
                     subject,
-                    preview: obj.preview || (obj.body || obj.contenido || obj.text ? (obj.body || obj.contenido || obj.text).substring(0, 50) + '...' : 'Sin contenido'),
-                    body: obj.body || obj.contenido || obj.text || obj.preview || '',
+                    preview: obj.preview || (obj.body || '').substring(0, 50) + '...',
+                    body: obj.body || obj.preview || '',
                     date,
                     starred: (obj.starred || obj.destacado)?.toLowerCase() === 'true',
                     read: (obj.read || obj.leido)?.toLowerCase() === 'true',
@@ -159,25 +218,27 @@ const Email: React.FC = () => {
                 };
             });
 
-            // Logic: Merge with local data based on a combination of ID and unique fields
+            // Reconciliación: La nube es la fuente de verdad.
+            // Solo mantenemos locales si son muy nuevos (buffer de 15 min)
             setEmails(prev => {
-                // Keep "Sent" emails and "Trash" (if they were deleted locally)
-                const localOnly = prev.filter(e => e.folder === 'sent' || (e.folder === 'trash' && e.deleted));
+                const now = Date.now();
+                const fifteenMinutes = 15 * 60 * 1000;
+                const cloudIds = new Set(newEmailsFromSheet.map(e => e.id));
 
-                // For the Inbox, we use the Sheet as the Source of Truth
-                // but we keep Mock emails if they haven't been "overridden" by the sheet
-                const existingInbox = prev.filter(e => e.folder === 'inbox' || !e.folder);
+                const recentlyCreatedLocal = prev.filter(local => {
+                    if (cloudIds.has(local.id)) return false;
+                    // Mantener mocks o locales muy recientes
+                    return local.id < 2000000 && (now - local.id) < fifteenMinutes;
+                });
 
-                // Deduplicate: If an email with same Subject+Sender exists, prioritize the one from the Sheet
-                const sheetKeys = new Set(newEmailsFromSheet.map(e => `${e.sender}-${e.subject}`.toLowerCase()));
-                const filteredExisting = existingInbox.filter(e => !sheetKeys.has(`${e.sender}-${e.subject}`.toLowerCase()));
-
-                return [...newEmailsFromSheet, ...filteredExisting, ...localOnly].sort((a, b) => b.id - a.id);
+                return [...newEmailsFromSheet, ...recentlyCreatedLocal].sort((a, b) => b.id - a.id);
             });
 
-            toast.success('Bandeja sincronizada', {
-                description: `Se han cargado ${newEmailsFromSheet.length} mensajes desde Sheets.`
-            });
+            if (!silent) {
+                toast.success('Bandeja sincronizada', {
+                    description: `Se han cargado ${newEmailsFromSheet.length} mensajes.`
+                });
+            }
         } catch (error) {
             console.error('Error fetching emails:', error);
             toast.error('Error de sincronización', { description: 'Verifica la conexión y que el Sheets sea público.' });
@@ -187,15 +248,24 @@ const Email: React.FC = () => {
     };
 
     const toggleStar = (id: number) => {
-        setEmails(emails.map(email =>
+        const updatedEmails = emails.map(email =>
             email.id === id ? { ...email, starred: !email.starred } : email
-        ));
+        );
+        setEmails(updatedEmails);
+
+        const target = updatedEmails.find(e => e.id === id);
+        if (target) syncWithWebhook(target, 'UPDATE');
     };
 
     const handleDelete = (id: number) => {
-        setEmails(emails.map(email =>
-            email.id === id ? { ...email, deleted: true, folder: 'trash' } : email
-        ));
+        const updatedEmails = emails.map(email =>
+            email.id === id ? { ...email, deleted: true, folder: 'trash' as const } : email
+        );
+        setEmails(updatedEmails);
+
+        const target = updatedEmails.find(e => e.id === id);
+        if (target) syncWithWebhook(target, 'DELETE');
+
         toast.error('Correo movido a la papelera');
         if (selectedEmail?.id === id) setSelectedEmail(null);
     };
@@ -211,7 +281,7 @@ const Email: React.FC = () => {
         e.preventDefault();
 
         // 1. Construct Email Object for Local Storage (History)
-        const sentParams: Email = {
+        const sentParams: EmailRecord = {
             id: Date.now(),
             sender: "Yo", // In a real app, this would be the current user
             subject: newEmail.subject,
@@ -264,6 +334,9 @@ const Email: React.FC = () => {
         const updatedEmails = [sentParams, ...emails];
         setEmails(updatedEmails);
 
+        // Sincronizar con la nube (Sheets)
+        await syncWithWebhook(sentParams, 'CREATE');
+
         setIsComposeOpen(false);
         setNewEmail({ to: '', subject: '', message: '' });
         setAttachments([]);
@@ -296,12 +369,19 @@ const Email: React.FC = () => {
         email.sender.toLowerCase().includes(searchTerm.toLowerCase())
     ).sort((a, b) => b.id - a.id);
 
-    const openEmail = (email: Email) => {
+    const openEmail = (email: EmailRecord) => {
         if (!email.read) {
-            setEmails(emails.map(e => e.id === email.id ? { ...e, read: true } : e));
+            const updated = emails.map(e => e.id === email.id ? { ...e, read: true } : e);
+            setEmails(updated);
+            const target = updated.find(e => e.id === email.id);
+            if (target) syncWithWebhook(target, 'UPDATE');
         }
         setSelectedEmail(email);
     };
+
+    React.useEffect(() => {
+        fetchEmailData(true);
+    }, []);
 
     return (
         <div className="h-full flex flex-col bg-card rounded-lg shadow overflow-hidden relative border border-border">
@@ -325,7 +405,7 @@ const Email: React.FC = () => {
                     </div>
                     <div className="flex items-center justify-between sm:justify-end space-x-2">
                         <button
-                            onClick={fetchEmailData}
+                            onClick={() => fetchEmailData(false)}
                             disabled={isLoading}
                             className="flex-1 sm:flex-none inline-flex items-center justify-center px-3 py-2 border border-border rounded-xl text-xs font-bold text-foreground bg-background hover:bg-muted transition-all disabled:opacity-50 shadow-sm"
                             title="Sincronizar"
