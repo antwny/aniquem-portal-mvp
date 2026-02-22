@@ -1,8 +1,8 @@
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Search, Star, Send, Inbox, Trash2, X, Paperclip, Image as ImageIcon, MoreVertical, ArrowLeft, Reply, Forward, Calendar, RefreshCw } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
 import { EmailService } from '../services/EmailService';
 
 interface Attachment {
@@ -14,6 +14,7 @@ interface Attachment {
 interface EmailRecord {
     id: number;
     sender: string;
+    senderName?: string; // Collaborator name
     subject: string;
     preview: string;
     body?: string; // Full content
@@ -23,7 +24,15 @@ interface EmailRecord {
     label?: string;
     deleted?: boolean;
     folder: 'inbox' | 'sent' | 'trash';
+    recipient?: string; // Recipient for sent emails
+    to?: string;        // Fallback or legacy field
     attachments?: Attachment[];
+}
+
+interface Alianza {
+    id: number;
+    empresa: string;
+    contacto_email?: string;
 }
 
 const mockEmails: EmailRecord[] = [
@@ -93,9 +102,11 @@ const mockEmails: EmailRecord[] = [
 ];
 
 const Email: React.FC = () => {
+    const { user } = useAuth();
     const [selectedTab, setSelectedTab] = useState<'inbox' | 'sent' | 'trash'>('inbox');
     const [filterStatus, setFilterStatus] = useState<'all' | 'unread' | 'starred'>('all');
     const [emails, setEmails] = useLocalStorage<EmailRecord[]>('aniquem-emails', mockEmails);
+    const [alianzas] = useLocalStorage<Alianza[]>('aniquem-alianzas', []);
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isComposeOpen, setIsComposeOpen] = useState(false);
@@ -103,6 +114,26 @@ const Email: React.FC = () => {
     const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachments, setAttachments] = useState<File[]>([]);
+    const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+    const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
+
+    const templates = [
+        {
+            name: 'Bienvenida',
+            subject: '¡Bienvenido/a al equipo de Aniquem!',
+            body: 'Hola,\n\nEs un gusto saludarte y darte la bienvenida oficial al equipo. Estamos muy contentos de contar con tu apoyo.\n\nSaludos,\nEquipo Aniquem'
+        },
+        {
+            name: 'Propuesta de Alianza',
+            subject: 'Propuesta de Alianza Corporativa - Aniquem',
+            body: 'Estimados,\n\nMe pongo en contacto con ustedes para proponer una alianza estratégica entre nuestras organizaciones para apoyar la rehabilitación de niños con quemaduras.\n\nQuedo atento a sus comentarios.\n\nAtentamente,\nGestión de Alianzas Aniquem'
+        },
+        {
+            name: 'Agradecimiento',
+            subject: 'Gracias por tu valioso apoyo - Aniquem',
+            body: 'Hola,\n\nQueríamos agradecerte sinceramente por tu reciente contribución y apoyo constante a nuestra misión. Juntos estamos transformando vidas.\n\nCon gratitud,\nAniquem'
+        }
+    ];
 
     const EMAIL_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVRyUpYEdCDrSy-caeca47LZ3Op-oLADLrQe9QV1RzwkaBXuLClZEQRwREt8tQZyAfGOYvdK7c2_tA/pub?gid=700125713&single=true&output=csv';
     const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwRJ_VEcURoeHmbdJvE1NWtQpuk6U5hSs_vP6D7T7oOkO77IqBSAwkw_ZTVp11eOoEA/exec';
@@ -214,6 +245,8 @@ const Email: React.FC = () => {
                     label: obj.label || obj.etiqueta || 'Nuevo',
                     deleted: (obj.deleted || obj.eliminado)?.toLowerCase() === 'true' || false,
                     folder: (obj.folder || obj.carpeta || 'inbox') as 'inbox' | 'sent' | 'trash',
+                    senderName: obj.sendername || obj.colaborador || '',
+                    recipient: obj.recipient || obj.destinatario || obj.to || '',
                     attachments: []
                 };
             });
@@ -283,7 +316,8 @@ const Email: React.FC = () => {
         // 1. Construct Email Object for Local Storage (History)
         const sentParams: EmailRecord = {
             id: Date.now(),
-            sender: "Yo", // In a real app, this would be the current user
+            sender: user?.email || "Yo",
+            senderName: user?.name || "Colaborador",
             subject: newEmail.subject,
             preview: newEmail.message.substring(0, 50) + "...",
             body: newEmail.message,
@@ -292,6 +326,8 @@ const Email: React.FC = () => {
             read: true,
             deleted: false,
             folder: 'sent',
+            recipient: newEmail.to,
+            to: newEmail.to,
             attachments: attachments.map(file => ({
                 name: file.name,
                 size: (file.size / 1024).toFixed(1) + " KB",
@@ -306,7 +342,7 @@ const Email: React.FC = () => {
             to_name: newEmail.to,
             subject: newEmail.subject,
             message: newEmail.message,
-            from_name: "Aniquem Portal System"
+            from_name: user?.name || "Aniquem Portal System"
         };
 
         // We import dynamically or use the service we created
@@ -381,6 +417,18 @@ const Email: React.FC = () => {
 
     React.useEffect(() => {
         fetchEmailData(true);
+    }, []);
+
+    // Auto-refresh every 5 minutes
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setIsAutoRefreshing(true);
+            fetchEmailData(true).finally(() => {
+                setTimeout(() => setIsAutoRefreshing(false), 3000);
+            });
+        }, 300000); // 5 minutes
+
+        return () => clearInterval(interval);
     }, []);
 
     return (
@@ -524,8 +572,28 @@ const Email: React.FC = () => {
                                             {selectedEmail.label === 'Automático' || selectedEmail.sender === 'Sistema de Agenda' ? <Calendar className="h-6 w-6" /> : selectedEmail.sender[0]}
                                         </div>
                                         <div>
-                                            <div className="font-semibold text-foreground">{selectedEmail.sender}</div>
-                                            <div className="text-sm text-muted-foreground">para mí</div>
+                                            <div className="font-semibold text-foreground flex items-center gap-2">
+                                                {selectedEmail.sender}
+                                                {alianzas.some(a => a.contacto_email === selectedEmail.sender) && (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white uppercase tracking-tighter shadow-sm animate-pulse">
+                                                        Aliado
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground flex items-center gap-1">
+                                                {selectedEmail.senderName && <span className="font-bold text-primary">Enviado por: {selectedEmail.senderName}</span>}
+                                                {selectedEmail.folder === 'sent' ? (
+                                                    <span className="flex items-center gap-1">
+                                                        <span>para:</span>
+                                                        <span className="font-medium text-foreground">{selectedEmail.recipient || selectedEmail.to || 'Destinatario'}</span>
+                                                        {(selectedEmail.recipient || selectedEmail.to) && alianzas.some(a => a.contacto_email === (selectedEmail.recipient || selectedEmail.to)) && (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase ml-1">Aliado</span>
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    <span>para mí</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="text-sm text-muted-foreground">{selectedEmail.date}</div>
@@ -587,9 +655,17 @@ const Email: React.FC = () => {
                                             </div>
                                             <div className="min-w-0 flex-1 px-4 md:grid md:grid-cols-2 md:gap-4">
                                                 <div className="flex items-center">
-                                                    <p className={`text-sm truncate mr-2 ${!email.read ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'} flex items-center`}>
+                                                    <p className={`text-sm truncate mr-2 ${!email.read ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'} flex items-center gap-2`}>
                                                         {(email.label === 'Automático' || email.sender === 'Sistema de Agenda') && <Calendar className="h-3 w-3 mr-1 text-blue-500" />}
-                                                        {email.sender}
+                                                        {email.folder === 'sent' ? (
+                                                            <span className="flex items-center gap-1">
+                                                                {email.senderName && <span className="text-primary font-black">[Yo: {email.senderName.split(' ')[0]}]</span>}
+                                                                <span className="opacity-60">→ {email.recipient || email.to || 'Destinatario'}</span>
+                                                            </span>
+                                                        ) : email.sender}
+                                                        {alianzas.some(a => a.contacto_email === (email.folder === 'sent' ? (email.recipient || email.to) : email.sender)) && (
+                                                            <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[8px] font-black uppercase">Aliado</span>
+                                                        )}
                                                     </p>
                                                     {email.label && (
                                                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-muted text-foreground">
@@ -673,9 +749,46 @@ const Email: React.FC = () => {
                 <div className="fixed inset-0 sm:inset-auto sm:fixed sm:bottom-0 sm:right-10 w-full lg:w-[600px] h-full lg:min-h-[400px] lg:max-h-[600px] bg-card lg:rounded-t-2xl shadow-2xl border border-border z-50 flex flex-col animate-in slide-in-from-bottom-6 duration-300">
                     <div className="px-5 py-4 bg-primary text-primary-foreground lg:rounded-t-2xl flex justify-between items-center shrink-0 shadow-lg">
                         <h3 className="text-sm font-black uppercase tracking-widest">Mensaje Nuevo</h3>
-                        <button onClick={() => setIsComposeOpen(false)} className="p-2 -mr-2 bg-white/10 rounded-full hover:bg-white/20 transition-all">
-                            <X className="h-5 w-5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTemplateMenuOpen(!isTemplateMenuOpen)}
+                                    className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg transition-all border border-white/10"
+                                >
+                                    <RefreshCw className={`h-3 w-3 ${isTemplateMenuOpen ? 'rotate-180' : ''} transition-transform`} />
+                                    Plantillas Fast
+                                </button>
+
+                                {isTemplateMenuOpen && (
+                                    <div className="absolute top-full right-0 mt-2 w-56 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="p-2 bg-muted/30 border-b border-border text-[9px] font-black uppercase text-muted-foreground tracking-widest px-4">
+                                            Selecciona una plantilla
+                                        </div>
+                                        <div className="p-1">
+                                            {templates.map(t => (
+                                                <button
+                                                    key={t.name}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setNewEmail({ ...newEmail, subject: t.subject, message: t.body });
+                                                        setIsTemplateMenuOpen(false);
+                                                        toast.success(`Plantilla "${t.name}" aplicada`);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs font-bold text-foreground hover:bg-primary hover:text-primary-foreground rounded-lg transition-all flex items-center justify-between group"
+                                                >
+                                                    {t.name}
+                                                    <Paperclip className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <button onClick={() => setIsComposeOpen(false)} className="p-2 -mr-2 bg-white/10 rounded-full hover:bg-white/20 transition-all">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
                     </div>
                     <form onSubmit={handleSend} className="flex-1 flex flex-col p-6 space-y-4 bg-background overflow-y-auto">
                         <div className="space-y-4">
@@ -755,6 +868,13 @@ const Email: React.FC = () => {
                             </button>
                         </div>
                     </form>
+                </div>
+            )}
+            {/* Auto-refresh indicator */}
+            {isAutoRefreshing && (
+                <div className="fixed bottom-20 right-6 lg:bottom-6 bg-primary/90 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-bounce z-50 shadow-primary/20">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span className="text-xs font-bold">Actualizando...</span>
                 </div>
             )}
         </div>
