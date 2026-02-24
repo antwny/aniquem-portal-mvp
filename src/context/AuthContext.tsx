@@ -4,6 +4,7 @@ interface User {
     id: string;
     name: string;
     email: string;
+    role: string;
     avatar?: string;
 }
 
@@ -12,6 +13,7 @@ interface AuthContextType {
     login: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
     logout: () => void;
     isAuthenticated: boolean;
+    isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -63,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     id: Date.now().toString(),
                     name: validUser.name || email.split('@')[0],
                     email: email,
+                    role: validUser.role || 'user',
                     avatar: `https://ui-avatars.com/api/?name=${validUser.name || email}&background=E30613&color=fff`
                 };
 
@@ -85,7 +88,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{
+            user,
+            login,
+            logout,
+            isAuthenticated: !!user,
+            isAdmin: user?.role === 'admin'
+        }}>
             {children}
         </AuthContext.Provider>
     );

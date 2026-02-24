@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin, Calendar as CalendarIcon, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Plus, X, Clock, MapPin, Calendar as CalendarIcon, RefreshCw, Search, Building2, Mail, User } from 'lucide-react';
 import useLocalStorage from '../hooks/useLocalStorage';
 import { toast } from 'sonner';
 import { EmailService } from '../services/EmailService';
+
+interface Alianza {
+    id: number;
+    empresa: string;
+    contacto: string;
+    contacto_email?: string;
+    eliminado?: boolean;
+}
 
 interface Event {
     id: number;
@@ -24,11 +32,18 @@ const Calendar: React.FC = () => {
 
     const WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbwRJ_VEcURoeHmbdJvE1NWtQpuk6U5hSs_vP6D7T7oOkO77IqBSAwkw_ZTVp11eOoEA/exec';
     const CALENDAR_SHEETS_CSV_URL: string = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVRyUpYEdCDrSy-caeca47LZ3Op-oLADLrQe9QV1RzwkaBXuLClZEQRwREt8tQZyAfGOYvdK7c2_tA/pub?gid=2018729699&single=true&output=csv'; // URL de la pestaña "Calendario" publicada como CSV
+    const ALIANZAS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTVRyUpYEdCDrSy-caeca47LZ3Op-oLADLrQe9QV1RzwkaBXuLClZEQRwREt8tQZyAfGOYvdK7c2_tA/pub?output=csv';
 
     const [isLoading, setIsLoading] = useState(false);
 
+    const [alianzas, setAlianzas] = useLocalStorage<Alianza[]>('aniquem-alianzas', []);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isVirtual, setIsVirtual] = useState(false);
+    const [viewMode, setViewMode] = useState<'month' | 'week' | 'agenda'>('month');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [allySearch, setAllySearch] = useState('');
+    const [showAllySuggestions, setShowAllySuggestions] = useState(false);
+    const [isContactDirectoryOpen, setIsContactDirectoryOpen] = useState(false);
     const [newEvent, setNewEvent] = useState({ title: '', day: '', time: '', location: '', color: 'bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200' });
 
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -41,6 +56,45 @@ const Calendar: React.FC = () => {
     const getFirstDayOfMonth = (date: Date) => {
         return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
     };
+
+    // Sincronización automática de Alianzas
+    useEffect(() => {
+        const fetchAlianzas = async () => {
+            try {
+                const response = await fetch(ALIANZAS_CSV_URL + `?t=${Date.now()}`);
+                const text = await response.text();
+                const rows = text.split('\n').filter(row => row.trim() !== '');
+                if (rows.length <= 1) return;
+
+                const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
+                const parsedAlianzas: Alianza[] = rows.slice(1).map((row) => {
+                    const values = row.split(',').map(v => v.trim());
+                    const obj: any = {};
+                    headers.forEach((header, i) => { obj[header] = values[i]; });
+                    return {
+                        id: Date.now() + Math.random(),
+                        empresa: obj.empresa || '',
+                        contacto: obj.contacto || '',
+                        contacto_email: obj.contacto_email || '',
+                        eliminado: false
+                    };
+                });
+
+                setAlianzas(parsedAlianzas);
+            } catch (error) {
+                console.error('Error syncing alianzas from Calendar:', error);
+            }
+        };
+
+        if (alianzas.length === 0) {
+            fetchAlianzas();
+        }
+    }, [alianzas.length, setAlianzas]);
+
+    // Sincronización automática de Calendario al montar
+    useEffect(() => {
+        fetchCalendarData();
+    }, []);
 
     const prevMonth = () => {
         setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
@@ -98,11 +152,12 @@ const Calendar: React.FC = () => {
                 };
             });
 
-            // Fusionar evitando duplicados por ID
+            // Fusionar: La hoja de cálculo tiene prioridad para los IDs existentes
             setEvents(prev => {
-                const existingIds = new Set(prev.map(e => e.id));
-                const filteredNew = newEvents.filter(e => !existingIds.has(e.id));
-                return [...prev, ...filteredNew];
+                const sheetIds = new Set(newEvents.map(e => e.id));
+                // Mantener solo los locales que NO están en la hoja de cálculo
+                const localOnly = prev.filter(e => !sheetIds.has(e.id));
+                return [...newEvents, ...localOnly];
             });
 
             toast.success('Sincronización exitosa', { description: `Se han cargado ${newEvents.length} eventos.` });
@@ -117,6 +172,30 @@ const Calendar: React.FC = () => {
     const handleAddEvent = (e: React.FormEvent) => {
         e.preventDefault();
         if (!newEvent.title || !newEvent.day) return;
+
+        // Conflict Detection
+        const conflictingEvent = events.find(e =>
+            e.day === parseInt(newEvent.day) &&
+            e.month === currentDate.getMonth() &&
+            e.year === currentDate.getFullYear() &&
+            e.time === newEvent.time
+        );
+
+        if (conflictingEvent) {
+            toast.warning('Conflicto de Horario', {
+                description: `Ya tienes el evento "${conflictingEvent.title}" programado para esa hora.`,
+                action: {
+                    label: 'Ignorar',
+                    onClick: () => proceedWithAdd()
+                }
+            });
+            return;
+        }
+
+        proceedWithAdd();
+    };
+
+    const proceedWithAdd = () => {
 
         const event: Event = {
             id: Date.now(),
@@ -207,7 +286,22 @@ const Calendar: React.FC = () => {
         setNewEvent({ title: '', day: '', time: '', location: '', color: 'bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200' });
         setNotifyParticipants(false);
         setGuestEmail('');
+        setAllySearch('');
+        setIsContactDirectoryOpen(false);
     };
+
+    const filteredAllies = alianzas.filter(a =>
+        !a.eliminado &&
+        (a.empresa.toLowerCase().includes(allySearch.toLowerCase()) ||
+            a.contacto.toLowerCase().includes(allySearch.toLowerCase()) ||
+            (a.contacto_email && a.contacto_email.toLowerCase().includes(allySearch.toLowerCase())))
+    ).slice(0, 5);
+
+    const filteredEvents = events.filter(e =>
+        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (e.location && e.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (e.guestEmail && e.guestEmail.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
     const handleSendReminder = () => {
         if (!selectedEvent) return;
@@ -294,7 +388,7 @@ const Calendar: React.FC = () => {
     });
 
     // Sidebar: Upcoming Events Logic
-    const upcomingEvents = [...events].filter(e => {
+    const upcomingEvents = [...filteredEvents].filter(e => {
         const eventDate = new Date(e.year, e.month, e.day);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -304,20 +398,33 @@ const Calendar: React.FC = () => {
         const dateB = new Date(b.year, b.month, b.day);
         if (dateA.getTime() !== dateB.getTime()) return dateA.getTime() - dateB.getTime();
         return a.time.localeCompare(b.time);
-    }).slice(0, 6); // Just show next 6 events for clarity
+    }).slice(0, 10); // Show more events if searching
 
 
     return (
         <div className="h-full flex flex-col space-y-4">
             <div className="flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-foreground capitalize">Calendario de Actividades</h2>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition flex items-center shadow-sm"
-                >
-                    <Plus className="h-5 w-5 mr-1" />
-                    Nuevo Evento
-                </button>
+                <div className="flex items-center space-x-2">
+                    <div className="flex bg-muted rounded-lg p-1 border border-border mr-2">
+                        {(['month', 'week', 'agenda'] as const).map((mode) => (
+                            <button
+                                key={mode}
+                                onClick={() => setViewMode(mode)}
+                                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${viewMode === mode ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                            >
+                                {mode === 'month' ? 'Mes' : mode === 'week' ? 'Semana' : 'Agenda'}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="bg-primary text-primary-foreground px-4 py-2 rounded-md hover:bg-primary/90 transition flex items-center shadow-sm"
+                    >
+                        <Plus className="h-5 w-5 mr-1" />
+                        Nuevo Evento
+                    </button>
+                </div>
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row gap-4 overflow-hidden">
@@ -325,7 +432,9 @@ const Calendar: React.FC = () => {
                 <div className="flex-1 flex flex-col bg-card rounded-lg shadow overflow-hidden border border-border">
                     {/* Calendar Header */}
                     <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
-                        <h2 className="text-lg font-bold text-foreground capitalize">{monthName}</h2>
+                        <h2 className="text-lg font-bold text-foreground capitalize">
+                            {viewMode === 'agenda' ? 'Agenda de Actividades' : monthName}
+                        </h2>
                         <div className="flex space-x-2">
                             <button
                                 onClick={fetchCalendarData}
@@ -335,71 +444,179 @@ const Calendar: React.FC = () => {
                             >
                                 <RefreshCw className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
                             </button>
-                            <button onClick={prevMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
-                                <ChevronLeft className="h-5 w-5" />
-                            </button>
-                            <button onClick={nextMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
-                                <ChevronRight className="h-5 w-5" />
-                            </button>
+                            {viewMode !== 'agenda' && (
+                                <>
+                                    <button onClick={prevMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
+                                        <ChevronLeft className="h-5 w-5" />
+                                    </button>
+                                    <button onClick={nextMonth} className="p-2 hover:bg-muted rounded-full shadow-sm border border-input text-foreground">
+                                        <ChevronRight className="h-5 w-5" />
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
-                    {/* Calendar Grid */}
-                    <div className="grid grid-cols-7 border-b border-border bg-muted/30">
-                        {days.map(day => (
-                            <div key={day} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                {day}
+                    {viewMode === 'month' && (
+                        <>
+                            {/* Calendar Grid Header */}
+                            <div className="grid grid-cols-7 border-b border-border bg-muted/30">
+                                {days.map(day => (
+                                    <div key={day} className="py-2 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        {day}
+                                    </div>
+                                ))}
                             </div>
-                        ))}
-                    </div>
 
-                    <div className="flex-1 grid grid-cols-7 grid-rows-6 divide-x divide-y divide-border overflow-y-auto lg:overflow-visible">
-                        {calendarDays.map((day, i) => {
-                            const isToday = day === new Date().getDate() &&
-                                currentDate.getMonth() === new Date().getMonth() &&
-                                currentDate.getFullYear() === new Date().getFullYear();
+                            <div className="flex-1 grid grid-cols-7 grid-rows-6 divide-x divide-y divide-border overflow-y-auto lg:overflow-visible">
+                                {calendarDays.map((day, i) => {
+                                    const isToday = day === new Date().getDate() &&
+                                        currentDate.getMonth() === new Date().getMonth() &&
+                                        currentDate.getFullYear() === new Date().getFullYear();
 
-                            const dayEvents = events.filter(e =>
-                                e.day === day &&
-                                e.month === currentDate.getMonth() &&
-                                e.year === currentDate.getFullYear()
-                            );
+                                    const dayEvents = filteredEvents.filter(e =>
+                                        e.day === day &&
+                                        e.month === currentDate.getMonth() &&
+                                        e.year === currentDate.getFullYear()
+                                    );
 
-                            return (
-                                <div key={i} className={`min-h-[100px] bg-card p-2 ${!day ? 'bg-muted/10' : ''} hover:bg-muted/20 transition-colors`}>
-                                    {day && (
-                                        <div className="h-full flex flex-col">
-                                            <div className="flex justify-between items-start">
-                                                <span className={`text-sm font-medium h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'}`}>
-                                                    {day}
-                                                </span>
-                                                {dayEvents.length > 0 && <span className="text-xs text-muted-foreground">{dayEvents.length} eventos</span>}
-                                            </div>
-
-                                            <div className="mt-2 space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
-                                                {dayEvents.map((event) => (
-                                                    <div
-                                                        key={event.id}
-                                                        onClick={(e) => { e.stopPropagation(); setSelectedEvent(event); }}
-                                                        className={`text-xs px-2 py-1 rounded border-l-2 ${event.color} border-current opacity-90 hover:opacity-100 cursor-pointer shadow-sm`}
-                                                    >
-                                                        <p className="font-semibold truncate">{event.title}</p>
-                                                        {event.time && <p className="opacity-75 flex items-center scale-90 origin-left"><Clock className="h-3 w-3 mr-1" />{event.time}</p>}
+                                    return (
+                                        <div key={i} className={`min-h-[100px] bg-card p-2 ${!day ? 'bg-muted/10' : ''} hover:bg-muted/20 transition-colors`}>
+                                            {day && (
+                                                <div className="h-full flex flex-col">
+                                                    <div className="flex justify-between items-start">
+                                                        <span className={`text-sm font-medium h-7 w-7 flex items-center justify-center rounded-full ${isToday ? 'bg-primary text-primary-foreground' : 'text-foreground'}`}>
+                                                            {day}
+                                                        </span>
+                                                        {dayEvents.length > 0 && <span className="text-xs text-muted-foreground">{dayEvents.length}</span>}
                                                     </div>
-                                                ))}
+
+                                                    <div className="mt-2 space-y-1 overflow-y-auto max-h-[80px] custom-scrollbar">
+                                                        {dayEvents.map((event) => (
+                                                            <div
+                                                                key={event.id}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedEvent(event); }}
+                                                                className={`text-xs px-2 py-1 rounded border-l-2 ${event.color} border-current opacity-90 hover:opacity-100 cursor-pointer shadow-sm`}
+                                                            >
+                                                                <p className="font-semibold truncate">{event.title}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
+
+                    {viewMode === 'week' && (
+                        <div className="flex-1 flex divide-x divide-border overflow-x-auto">
+                            {Array.from({ length: 7 }).map((_, i) => {
+                                const date = new Date(currentDate);
+                                date.setDate(currentDate.getDate() - currentDate.getDay() + i);
+                                const isToday = date.toDateString() === new Date().toDateString();
+
+                                const dayEvents = filteredEvents.filter(e =>
+                                    e.day === date.getDate() &&
+                                    e.month === date.getMonth() &&
+                                    e.year === date.getFullYear()
+                                );
+
+                                return (
+                                    <div key={i} className={`flex-1 min-w-[150px] p-4 ${isToday ? 'bg-primary/5' : ''}`}>
+                                        <div className="text-center mb-4">
+                                            <p className="text-xs font-bold text-muted-foreground uppercase">{days[i]}</p>
+                                            <p className={`text-2xl font-black ${isToday ? 'text-primary' : 'text-foreground'}`}>{date.getDate()}</p>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {dayEvents.map(event => (
+                                                <div
+                                                    key={event.id}
+                                                    onClick={() => setSelectedEvent(event)}
+                                                    className={`p-3 rounded-xl border-l-4 ${event.color} border-current cursor-pointer hover:scale-[1.02] transition-transform shadow-sm`}
+                                                >
+                                                    <p className="text-xs font-black uppercase opacity-70 mb-1">{event.time}</p>
+                                                    <p className="text-sm font-bold leading-tight">{event.title}</p>
+                                                    {event.location && <p className="text-[10px] mt-2 flex items-center opacity-70"><MapPin className="h-3 w-3 mr-1" />{event.location}</p>}
+                                                </div>
+                                            ))}
+                                            {dayEvents.length === 0 && (
+                                                <div className="h-20 border-2 border-dashed border-muted rounded-xl flex items-center justify-center">
+                                                    <span className="text-[10px] text-muted-foreground font-medium">Libre</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {viewMode === 'agenda' && (
+                        <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-muted/5">
+                            {/* Grouping by Month/Year in a flat list */}
+                            {(() => {
+                                const upcomingGrouped = [...filteredEvents].sort((a, b) => {
+                                    return new Date(a.year, a.month, a.day).getTime() - new Date(b.year, b.month, b.day).getTime();
+                                });
+
+                                if (upcomingGrouped.length === 0) {
+                                    return (
+                                        <div className="h-full flex flex-col items-center justify-center text-muted-foreground/50">
+                                            <CalendarIcon className="h-16 w-16 mb-4 opacity-10" />
+                                            <p className="font-bold">No hay eventos programados</p>
+                                        </div>
+                                    );
+                                }
+
+                                return upcomingGrouped.map((event, idx) => {
+                                    const eventDate = new Date(event.year, event.month, event.day);
+                                    const prevEvent = idx > 0 ? upcomingGrouped[idx - 1] : null;
+                                    const showHeader = !prevEvent || prevEvent.day !== event.day || prevEvent.month !== event.month;
+
+                                    return (
+                                        <div key={event.id}>
+                                            {showHeader && (
+                                                <div className="flex items-center gap-4 mb-4">
+                                                    <div className="h-px flex-1 bg-border" />
+                                                    <span className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground bg-card px-3 py-1 rounded-full border border-border shadow-sm">
+                                                        {eventDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                    </span>
+                                                    <div className="h-px flex-1 bg-border" />
+                                                </div>
+                                            )}
+                                            <div
+                                                onClick={() => setSelectedEvent(event)}
+                                                className={`flex items-center p-4 rounded-2xl border border-border bg-card hover:border-primary/50 transition-all cursor-pointer shadow-sm group`}
+                                            >
+                                                <div className={`w-20 text-center border-r border-border pr-4 mr-4`}>
+                                                    <p className="text-xs font-black text-primary">{event.time || '--:--'}</p>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h4 className="font-bold text-foreground group-hover:text-primary transition-colors">{event.title}</h4>
+                                                    <div className="flex items-center gap-4 mt-1">
+                                                        {event.location && <span className="text-[10px] text-muted-foreground flex items-center"><MapPin className="h-3 w-3 mr-1" />{event.location}</span>}
+                                                        {event.guestEmail && <span className="text-[10px] text-muted-foreground flex items-center font-bold text-primary/80"><Clock className="h-3 w-3 mr-1" />{event.guestEmail}</span>}
+                                                    </div>
+                                                </div>
+                                                <div className={`h-10 w-10 rounded-xl ${event.color.split(' ')[0]} bg-opacity-20 flex items-center justify-center`}>
+                                                    <CalendarIcon className={`h-5 w-5 ${event.color.split(' ')[1]}`} />
+                                                </div>
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
+                                    );
+                                });
+                            })()}
+                        </div>
+                    )}
                 </div>
 
                 {/* Agenda Sidebar */}
                 <div className="w-full lg:w-80 flex flex-col space-y-4">
                     <div className="bg-card rounded-lg shadow-sm border border-border p-4 flex flex-col h-full overflow-hidden">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-2">
                             <h3 className="text-lg font-bold text-foreground">Próximos Eventos</h3>
                             <button
                                 onClick={() => setIsModalOpen(true)}
@@ -407,6 +624,28 @@ const Calendar: React.FC = () => {
                             >
                                 <Plus className="h-5 w-5 text-primary" />
                             </button>
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="relative mb-4">
+                            <input
+                                type="text"
+                                placeholder="Buscar eventos, aliados..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-8 pr-4 py-2 bg-muted/50 border border-border rounded-lg text-xs focus:ring-1 focus:ring-primary outline-none transition-all"
+                            />
+                            <svg className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
@@ -463,7 +702,7 @@ const Calendar: React.FC = () => {
             {/* New Event Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-card rounded-lg shadow-xl w-full max-w-md overflow-hidden border border-border">
+                    <div className="bg-card rounded-lg shadow-xl w-full max-w-md border border-border">
                         <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/30">
                             <h3 className="text-lg font-medium text-foreground">Nuevo Evento</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
@@ -504,6 +743,124 @@ const Calendar: React.FC = () => {
                                         onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
                                     />
                                 </div>
+                                <div className="md:col-span-2 space-y-3">
+                                    <div className="relative group">
+                                        <label className="text-[10px] font-black uppercase text-muted-foreground mb-1 block">Invitado Aliado (Opcional)</label>
+                                        <div className="relative flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                <input
+                                                    type="text"
+                                                    className="w-full pl-10 pr-4 py-2 bg-muted/20 border border-border rounded-lg text-sm focus:ring-1 focus:ring-primary outline-none transition-all"
+                                                    placeholder="Escribir nombre o correo manual..."
+                                                    value={allySearch}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setAllySearch(val);
+                                                        // If looks like an email, update guestEmail too
+                                                        if (val.includes('@')) setGuestEmail(val);
+                                                        setShowAllySuggestions(true);
+                                                    }}
+                                                    onFocus={() => setShowAllySuggestions(true)}
+                                                />
+                                                {showAllySuggestions && allySearch && filteredAllies.length > 0 && (
+                                                    <div className="absolute z-[100] w-full mt-1 bg-card border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                                        {filteredAllies.map(alianza => (
+                                                            <button
+                                                                key={alianza.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setGuestEmail(alianza.contacto_email || '');
+                                                                    setAllySearch(alianza.empresa);
+                                                                    setShowAllySuggestions(false);
+                                                                }}
+                                                                className="w-full px-4 py-3 text-left hover:bg-muted transition-colors border-b border-border last:border-0"
+                                                            >
+                                                                <div className="flex items-center">
+                                                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center mr-3">
+                                                                        <Building2 className="w-4 h-4 text-primary" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-bold text-foreground">{alianza.empresa}</p>
+                                                                        <p className="text-[10px] text-muted-foreground">{alianza.contacto} • {alianza.contacto_email}</p>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsContactDirectoryOpen(!isContactDirectoryOpen)}
+                                                    className={`p-2 rounded-lg transition-all border ${isContactDirectoryOpen ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted border-border text-muted-foreground'}`}
+                                                    title="Directorio de Contactos"
+                                                >
+                                                    <User className="h-5 w-5" />
+                                                </button>
+
+                                                {isContactDirectoryOpen && (
+                                                    <div className="absolute top-full right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                                        <div className="p-3 bg-muted/30 border-b border-border flex justify-between items-center px-4">
+                                                            <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Contactos de Alianzas</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setIsContactDirectoryOpen(false);
+                                                                }}
+                                                            >
+                                                                <X className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
+                                                        <div className="max-h-[300px] overflow-y-auto p-1 custom-scrollbar">
+                                                            {alianzas.filter(a => a.contacto_email && !a.eliminado).length > 0 ? (
+                                                                alianzas.filter(a => a.contacto_email && !a.eliminado).map(contacto => (
+                                                                    <button
+                                                                        key={contacto.id}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setGuestEmail(contacto.contacto_email || '');
+                                                                            setAllySearch(contacto.empresa);
+                                                                            setIsContactDirectoryOpen(false);
+                                                                            setShowAllySuggestions(false);
+                                                                        }}
+                                                                        className="w-full text-left px-4 py-3 hover:bg-primary/5 rounded-lg border-b border-border/50 last:border-0 transition-all group"
+                                                                    >
+                                                                        <div className="text-xs font-black text-foreground group-hover:text-primary mb-0.5">{contacto.empresa}</div>
+                                                                        <div className="text-[10px] text-muted-foreground truncate">{contacto.contacto_email}</div>
+                                                                    </button>
+                                                                ))
+                                                            ) : (
+                                                                <div className="p-4 text-center text-xs text-muted-foreground italic">
+                                                                    No hay aliados con email registrados
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {guestEmail && guestEmail !== allySearch && (
+                                        <div className="p-2 bg-primary/5 rounded-lg border border-primary/10 flex items-center justify-between">
+                                            <div className="flex items-center">
+                                                <Mail className="h-3 w-3 text-primary mr-2" />
+                                                <span className="text-xs font-medium text-foreground">{guestEmail}</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => { setGuestEmail(''); setAllySearch(''); }}
+                                                className="text-muted-foreground hover:text-red-500"
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-1">Ubicación (Opcional)</label>
@@ -538,16 +895,6 @@ const Calendar: React.FC = () => {
                                         />
                                     ))}
                                 </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-foreground mb-1">Invitar Aliado Externo (Email)</label>
-                                <input
-                                    type="email"
-                                    className="block w-full bg-background border-input rounded-md shadow-sm focus:ring-ring focus:border-ring sm:text-sm p-2 border text-foreground"
-                                    value={guestEmail}
-                                    onChange={(e) => setGuestEmail(e.target.value)}
-                                    placeholder="aliado@ejemplo.com"
-                                />
                             </div>
                             <div className="flex items-center space-x-4">
                                 <div className="flex items-center">

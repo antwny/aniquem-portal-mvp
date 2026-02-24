@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, MoreHorizontal, Plus, X, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Search, Plus, X, ShieldCheck, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface UserItem {
@@ -19,7 +19,9 @@ const Users: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
+    const [isEditing, setIsEditing] = useState(false);
+    const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'user' });
+    const [deleteId, setDeleteId] = useState<string | null>(null);
 
     const fetchUsers = async () => {
         if (!USERS_SHEETS_CSV_URL) return;
@@ -50,8 +52,50 @@ const Users: React.FC = () => {
         fetchUsers();
     }, []);
 
-    const handleAddUser = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setIsLoading(true);
+        const action = isEditing ? 'UPDATE' : 'CREATE';
+
+        // Estructura de columnas según Apps Script: email, password, name, role
+        // Para UPDATE, el script busca por rows[i][0] (email en este caso)
+        const payload = {
+            action: action,
+            sheet: 'Usuarios',
+            id: formData.email, // Usamos el email como ID para la búsqueda en el script
+            email: formData.email,
+            password: formData.password,
+            name: formData.name,
+            role: formData.role
+        };
+
+        try {
+            await fetch(WEBHOOK_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'text/plain' },
+                body: JSON.stringify(payload)
+            });
+
+            toast.success(isEditing ? 'Usuario actualizado' : 'Usuario registrado', {
+                description: 'Los cambios se sincronizarán con la nube en breve.'
+            });
+
+            setIsModalOpen(false);
+            if (isEditing) {
+                setUsers(users.map(u => u.email === formData.email ? { ...u, ...formData } : u));
+            } else {
+                setUsers([...users, { id: Date.now().toString(), ...formData }]);
+            }
+            resetForm();
+        } catch (error) {
+            toast.error('Error en la operación');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleDeleteUser = async (email: string) => {
         setIsLoading(true);
         try {
             await fetch(WEBHOOK_URL, {
@@ -59,23 +103,36 @@ const Users: React.FC = () => {
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
                 body: JSON.stringify({
-                    action: 'signup',
-                    ...newUser
+                    action: 'DELETE',
+                    sheet: 'Usuarios',
+                    id: email
                 })
             });
 
-            toast.success('Usuario registrado', { description: 'Los cambios se verán reflejados en breve.' });
-            setIsModalOpen(false);
-            setNewUser({ name: '', email: '', password: '', role: 'user' });
-
-            const localNew: UserItem = { id: Date.now().toString(), ...newUser };
-            setUsers([...users, localNew]);
-
+            setUsers(users.filter(u => u.email !== email));
+            toast.success('Usuario eliminado');
+            setDeleteId(null);
         } catch (error) {
-            toast.error('Error al registrar usuario');
+            toast.error('Error al eliminar usuario');
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const resetForm = () => {
+        setFormData({ name: '', email: '', password: '', role: 'user' });
+        setIsEditing(false);
+    };
+
+    const openEditModal = (user: UserItem) => {
+        setFormData({
+            name: user.name,
+            email: user.email,
+            password: user.password || '',
+            role: user.role
+        });
+        setIsEditing(true);
+        setIsModalOpen(true);
     };
 
     const filteredUsers = users.filter(u =>
@@ -165,9 +222,22 @@ const Users: React.FC = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button className="text-muted-foreground hover:text-foreground transition-all p-2 rounded-lg hover:bg-muted">
-                                            <MoreHorizontal className="h-5 w-5" />
-                                        </button>
+                                        <div className="flex justify-end space-x-2">
+                                            <button
+                                                onClick={() => openEditModal(person)}
+                                                className="text-primary hover:text-red-700 transition-all p-2 rounded-lg hover:bg-primary/10"
+                                                title="Editar Usuario"
+                                            >
+                                                <RefreshCw className="h-4 w-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => setDeleteId(person.email)}
+                                                className="text-muted-foreground hover:text-red-600 transition-all p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                title="Eliminar Usuario"
+                                            >
+                                                <X className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -185,20 +255,22 @@ const Users: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
                     <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-border">
                         <div className="px-6 py-4 border-b border-border flex justify-between items-center bg-muted/20">
-                            <h3 className="text-lg font-bold text-foreground">Registrar Nuevo Usuario</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                            <h3 className="text-lg font-bold text-foreground">
+                                {isEditing ? 'Editar Usuario' : 'Registrar Nuevo Usuario'}
+                            </h3>
+                            <button onClick={() => { setIsModalOpen(false); resetForm(); }} className="text-muted-foreground hover:text-foreground">
                                 <X className="h-6 w-6" />
                             </button>
                         </div>
-                        <form onSubmit={handleAddUser} className="p-6 space-y-4">
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-semibold text-foreground mb-1">Nombre Completo</label>
                                 <input
                                     type="text"
                                     required
                                     className="block w-full bg-background border-border rounded-xl p-3 border text-foreground"
-                                    value={newUser.name}
-                                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                 />
                             </div>
                             <div>
@@ -206,38 +278,70 @@ const Users: React.FC = () => {
                                 <input
                                     type="email"
                                     required
-                                    className="block w-full bg-background border-border rounded-xl p-3 border text-foreground"
-                                    value={newUser.email}
-                                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                                    disabled={isEditing}
+                                    className={`block w-full bg-background border-border rounded-xl p-3 border text-foreground ${isEditing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    value={formData.email}
+                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-foreground mb-1">Contraseña Temporal</label>
+                                <label className="block text-sm font-semibold text-foreground mb-1">
+                                    {isEditing ? 'Nueva Contraseña (Opcional)' : 'Contraseña Temporal'}
+                                </label>
                                 <input
                                     type="password"
-                                    required
+                                    required={!isEditing}
                                     className="block w-full bg-background border-border rounded-xl p-3 border text-foreground"
-                                    value={newUser.password}
-                                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                                    value={formData.password}
+                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-semibold text-foreground mb-1">Rol en el Sistema</label>
                                 <select
                                     className="block w-full bg-background border-border rounded-xl p-3 border text-foreground"
-                                    value={newUser.role}
-                                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                                    value={formData.role}
+                                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                 >
                                     <option value="user">Usuario Estándar</option>
                                     <option value="admin">Administrador</option>
                                 </select>
                             </div>
                             <div className="pt-4">
-                                <button type="submit" disabled={isLoading} className="w-full bg-primary text-white font-bold p-3 rounded-xl">
-                                    {isLoading ? 'Registrando...' : 'Crear Cuenta'}
+                                <button type="submit" disabled={isLoading} className="w-full bg-primary text-white font-bold p-3 rounded-xl shadow-lg hover:bg-red-700 transition-all active:scale-95">
+                                    {isLoading ? 'Procesando...' : (isEditing ? 'Guardar Cambios' : 'Crear Cuenta')}
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Delete Confirmation Modal */}
+            {deleteId && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setDeleteId(null)} />
+                    <div className="relative bg-card w-full max-w-sm rounded-2xl shadow-2xl border border-border p-6 text-center animate-in zoom-in-95 duration-200">
+                        <div className="mx-auto w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                            <X className="w-8 h-8 text-red-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-foreground mb-2">¿Eliminar Usuario?</h3>
+                        <p className="text-muted-foreground text-sm mb-6">
+                            Esta acción eliminará la cuenta de <span className="font-bold text-foreground">{deleteId}</span> permanentemente del sistema.
+                        </p>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setDeleteId(null)}
+                                className="px-4 py-2 rounded-xl border border-border font-bold text-sm hover:bg-muted"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleDeleteUser(deleteId)}
+                                className="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 shadow-lg shadow-red-500/20"
+                            >
+                                {isLoading ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
