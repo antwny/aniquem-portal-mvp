@@ -130,7 +130,7 @@ const Users: React.FC = () => {
         setFormData({
             name: user.name,
             email: user.email,
-            password: user.password || '',
+            password: '',
             role: user.role
         });
         setIsEditing(true);
