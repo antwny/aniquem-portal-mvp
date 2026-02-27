@@ -1,23 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Calendar, Mail } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Handshake, AlertCircle, ArrowRight } from 'lucide-react';
+import { Handshake } from 'lucide-react';
 
-// Define duplicate interfaces for now to avoid major refactor, ideally these go in a types file
 interface Email {
     id: number;
     read: boolean;
     folder: 'inbox' | 'sent' | 'trash';
     deleted?: boolean;
+    subject?: string;
+    date?: string;
+    sender?: string;
 }
 
-const data = [
-    { name: 'Ene', donaciones: 4000, voluntarios: 24 },
-    { name: 'Feb', donaciones: 3000, voluntarios: 13 },
-    { name: 'Mar', donaciones: 2000, voluntarios: 98 },
-    { name: 'Abr', donaciones: 2780, voluntarios: 39 },
-    { name: 'May', donaciones: 1890, voluntarios: 48 },
-    { name: 'Jun', donaciones: 2390, voluntarios: 38 },
+const emptyData = [
+    { name: 'Ene', donaciones: 0, voluntarios: 0 },
+    { name: 'Feb', donaciones: 0, voluntarios: 0 },
+    { name: 'Mar', donaciones: 0, voluntarios: 0 },
 ];
 
 const Dashboard: React.FC = () => {
@@ -25,8 +24,11 @@ const Dashboard: React.FC = () => {
     const [newProspects, setNewProspects] = useState(0);
     const [meetingsToday, setMeetingsToday] = useState(0);
     const [inProcessAllies, setInProcessAllies] = useState(0);
+    const [recentActivity, setRecentActivity] = useState<{ id: number; title: string; subtitle: string; time: string }[]>([]);
 
     useEffect(() => {
+        let activityList: { id: number; title: string; subtitle: string; time: string, timestamp: number }[] = [];
+
         // Emails
         const storedEmails = localStorage.getItem('aniquem-emails');
         if (storedEmails) {
@@ -34,11 +36,21 @@ const Dashboard: React.FC = () => {
                 const parsed: Email[] = JSON.parse(storedEmails);
                 const unread = parsed.filter(e => (e.folder === 'inbox' || !e.folder) && !e.deleted && !e.read).length;
                 setUnreadEmails(unread);
+
+                parsed.slice(0, 3).forEach((e, idx) => {
+                    activityList.push({
+                        id: e.id || Date.now() + idx,
+                        title: `Correo: ${e.subject || 'Sin Asunto'}`,
+                        subtitle: `De: ${e.sender || 'Desconocido'}`,
+                        time: e.date || 'Reciente',
+                        timestamp: e.id || 0
+                    });
+                });
             } catch (e) {
-                setUnreadEmails(2);
+                setUnreadEmails(0);
             }
         } else {
-            setUnreadEmails(2);
+            setUnreadEmails(0);
         }
 
         // Alianzas Stats
@@ -66,10 +78,25 @@ const Dashboard: React.FC = () => {
                     e.year === today.getFullYear()
                 ).length;
                 setMeetingsToday(todayCount);
+
+                events.slice(0, 3).forEach((e: any, idx: number) => {
+                    activityList.push({
+                        id: e.id || Date.now() + 100 + idx,
+                        title: `Evento Especial: ${e.title}`,
+                        subtitle: `Agendado para el ${e.day}/${e.month + 1}/${e.year}`,
+                        time: 'Pronto',
+                        timestamp: e.id || 1
+                    });
+                });
             } catch (e) {
                 setMeetingsToday(0);
             }
         }
+
+        // Sort activity by pretending the ones with higher IDs are newer
+        activityList.sort((a, b) => b.timestamp - a.timestamp);
+        setRecentActivity(activityList.slice(0, 5));
+
     }, []);
 
     const stats = [
@@ -116,14 +143,11 @@ const Dashboard: React.FC = () => {
                 <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-bold text-foreground">Pipeline de Alianzas (Prospectos)</h3>
-                        <select className="text-xs border-none bg-muted/50 rounded-md px-2 py-1 text-muted-foreground focus:ring-0">
-                            <option>Últimos 6 meses</option>
-                            <option>Este año</option>
-                        </select>
+                        <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">Datos en recolección</span>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={data}>
+                            <LineChart data={emptyData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
                                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dy={10} />
                                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dx={-10} tickFormatter={(value) => `S/.${value / 1000}k`} />
@@ -147,13 +171,11 @@ const Dashboard: React.FC = () => {
                 <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-lg font-bold text-foreground">Conversión WhatsApp/Email</h3>
-                        <div className="flex space-x-2">
-                            <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-                        </div>
+                        <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-md">Datos en recolección</span>
                     </div>
                     <div className="h-72">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={data}>
+                            <BarChart data={emptyData}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
                                 <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dy={10} />
                                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} dx={-10} />
@@ -174,61 +196,29 @@ const Dashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Integration Tips & Calendly */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="md:col-span-2 bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border border-l-4 border-l-primary transition-shadow duration-300">
-                    <div className="flex items-center gap-3 mb-4">
-                        <AlertCircle className="h-6 w-6 text-primary" />
-                        <h3 className="text-lg font-bold text-foreground">Guía de Integración Funcional</h3>
-                    </div>
-                    <div className="space-y-4 text-sm text-muted-foreground">
-                        <p>Para que este portal sea 100% automático sin backend:</p>
-                        <ul className="list-disc pl-5 space-y-1">
-                            <li>Publica tu Google Sheets como CSV y pega la URL en `Alianzas.tsx`.</li>
-                            <li>Usa <strong>Make.com</strong> para conectar tu correo de alianzas con la hoja de Sheets.</li>
-                            <li>Los contactos nuevos aparecerán aquí automáticamente.</li>
-                        </ul>
-                        <div className="pt-2">
-                            <button className="text-primary font-bold hover:underline flex items-center">
-                                Ver documentación de configuración <ArrowRight className="ml-2 h-4 w-4" />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-primary shadow-lg rounded-2xl p-6 text-primary-foreground flex flex-col justify-between">
-                    <div>
-                        <Calendar className="h-8 w-8 mb-4 opacity-80" />
-                        <h3 className="text-xl font-bold mb-2">Agendar Reunión</h3>
-                        <p className="text-sm opacity-90 mb-6">Usa Calendly para coordinar alianzas sin correos de ida y vuelta.</p>
-                    </div>
-                    <button
-                        onClick={() => window.open('https://calendly.com', '_blank')}
-                        className="w-full py-3 bg-background text-primary rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-md"
-                    >
-                        Abrir Calendly
-                    </button>
-                </div>
-            </div>
-
             {/* Recent Activity / Content */}
             <div className="bg-card shadow-sm hover:shadow-md rounded-2xl p-6 border border-border transition-shadow duration-300">
                 <h3 className="text-lg font-bold text-foreground mb-6">Actividad Reciente</h3>
-                <ul className="space-y-6">
-                    <li className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-primary before:rounded-full">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
-                            <div>
-                                <h4 className="text-sm font-semibold text-foreground">Reunión de planificación - Alianzas</h4>
-                                <p className="text-sm text-muted-foreground mt-1">Programada vía Calendly para mañana a las 10:00 AM</p>
-                            </div>
-                            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">hace 1h</span>
-                        </div>
-                    </li>
-                </ul>
+                {recentActivity.length > 0 ? (
+                    <ul className="space-y-6">
+                        {recentActivity.map((activity) => (
+                            <li key={activity.id} className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-primary before:rounded-full">
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-foreground">{activity.title}</h4>
+                                        <p className="text-sm text-muted-foreground mt-1">{activity.subtitle}</p>
+                                    </div>
+                                    <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">{activity.time}</span>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <div className="text-center text-muted-foreground text-sm py-4">No hay actividad reciente.</div>
+                )}
             </div>
         </div>
     );
 };
-
 
 export default Dashboard;
