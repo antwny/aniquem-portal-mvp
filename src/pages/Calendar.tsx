@@ -112,7 +112,7 @@ const Calendar: React.FC = () => {
 
     const fetchCalendarData = async () => {
         if (!CALENDAR_SHEETS_CSV_URL) {
-            toast.info('Configura la URL', { description: 'Publica la pestaña "Calendario" como CSV en Google Sheets.' });
+            toast.info('Configura la URL', { id: 'calendar-config-url', description: 'Publica la pestaña "Calendario" como CSV en Google Sheets.' });
             return;
         }
 
@@ -127,7 +127,7 @@ const Calendar: React.FC = () => {
 
             const rows = text.split('\n').filter(row => row.trim() !== '');
             if (rows.length <= 1) {
-                toast.warning('Hoja vacía o sin datos válidos');
+                toast.warning('Hoja vacía o sin datos válidos', { id: 'calendar-empty-sheet' });
                 return;
             }
 
@@ -160,10 +160,10 @@ const Calendar: React.FC = () => {
                 return [...newEvents, ...localOnly];
             });
 
-            toast.success('Sincronización exitosa', { description: `Se han cargado ${newEvents.length} eventos.` });
+            toast.success('Sincronización exitosa', { id: 'calendar-sync-success', description: `Se han cargado ${newEvents.length} eventos.` });
         } catch (error) {
             console.error('Error fetching calendar:', error);
-            toast.error('Error de red', { description: 'No se pudo conectar con Google Sheets.' });
+            toast.error('Error de red', { id: 'calendar-sync-error', description: 'No se pudo conectar con Google Sheets.' });
         } finally {
             setIsLoading(false);
         }
@@ -207,7 +207,7 @@ const Calendar: React.FC = () => {
             location: newEvent.location,
             color: newEvent.color,
             guestEmail: guestEmail,
-            meetLink: isVirtual ? `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}` : ''
+            meetLink: isVirtual ? "GENERATE" : ''
         };
 
         setEvents([...events, event]);
@@ -218,7 +218,7 @@ const Calendar: React.FC = () => {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ ...event, action: 'CREATE', sheet: 'Calendario' })
+                body: JSON.stringify({ ...event, action: 'CREATE', sheet: 'Calendario', apiKey: "ANIQUEM_SECRET_KEY_2026" })
             }).then(() => {
                 toast.info('Sincronizando...', { description: 'El evento se está guardando en Google Sheets.' });
             }).catch(err => {
@@ -247,32 +247,35 @@ const Calendar: React.FC = () => {
 
         // Automation: Send Email to Guest (External Simulation + Real)
         if (guestEmail) {
-            newEmails.unshift({
-                id: Date.now() + 2,
-                sender: "Yo", // Simulating sent by current user
-                subject: `Invitación a Aliado: ${newEvent.title}`,
-                preview: `Estimado aliado, le invitamos al evento ${newEvent.title}...`,
-                body: `Estimado/a,\n\nNos complace invitarlo al siguiente evento:\n\nEvento: ${newEvent.title}\nFecha: ${newEvent.day} de ${monthName}\nHora: ${newEvent.time}\nLugar: ${newEvent.location || 'Por definir'}\n\nEsperamos contar con su presencia.\n\nAtentamente,\nEquipo Aniquem`,
-                date: "Ahora",
-                starred: false,
-                read: true,
-                deleted: false,
-                folder: 'sent', // Goes to Sent folder
-            });
+            if (event.meetLink === "GENERATE") {
+                toast.success('Evento creado. El servidor generará el link de Meet y lo enviará al invitado.');
+            } else {
+                newEmails.unshift({
+                    id: Date.now() + 2,
+                    sender: "Yo", // Simulating sent by current user
+                    subject: `Invitación a Aliado: ${newEvent.title}`,
+                    preview: `Estimado aliado, le invitamos al evento ${newEvent.title}...`,
+                    body: `Estimado/a,\n\nNos complace invitarlo al siguiente evento:\n\nEvento: ${newEvent.title}\nFecha: ${newEvent.day} de ${monthName}\nHora: ${newEvent.time}\nLugar: ${newEvent.location || 'Por definir'}\n\nEsperamos contar con su presencia.\n\nAtentamente,\nEquipo Aniquem`,
+                    date: "Ahora",
+                    starred: false,
+                    read: true,
+                    deleted: false,
+                    folder: 'sent', // Goes to Sent folder
+                });
 
-            // Try real send
-            EmailService.sendEmail({
-                to_email: guestEmail,
-                email_to: guestEmail,
-                to_name: guestEmail,
-                subject: `Invitación a Aliado: ${newEvent.title}`,
-                message: `Estimado/a,\n\nNos complace invitarlo al siguiente evento:\n\nEvento: ${newEvent.title}\nFecha: ${newEvent.day} de ${monthName}\nHora: ${newEvent.time}\nLugar: ${newEvent.location || (event.meetLink ? 'Videollamada de Google Meet' : 'Por definir')}\n${event.meetLink ? `\nEnlace de la reunión (Meet): ${event.meetLink}\n` : ''}\nEsperamos contar con su presencia.\n\nAtentamente,\nEquipo Aniquem`,
-                from_name: "Aniquem Events"
-            }).then(sent => {
-                if (sent) toast.success(`Invitación oficial enviada a ${guestEmail}`);
-                else toast.success(`Invitación simulada a ${guestEmail}`);
-            });
-
+                // Try real send
+                EmailService.sendEmail({
+                    to_email: guestEmail,
+                    email_to: guestEmail,
+                    to_name: guestEmail,
+                    subject: `Invitación a Aliado: ${newEvent.title}`,
+                    message: `Estimado/a,\n\nNos complace invitarlo al siguiente evento:\n\nEvento: ${newEvent.title}\nFecha: ${newEvent.day} de ${monthName}\nHora: ${newEvent.time}\nLugar: ${newEvent.location || (event.meetLink ? 'Videollamada de Google Meet' : 'Por definir')}\n${event.meetLink ? `\nEnlace de la reunión (Meet): ${event.meetLink}\n` : ''}\nEsperamos contar con su presencia.\n\nAtentamente,\nEquipo Aniquem`,
+                    from_name: "Aniquem Events"
+                }).then(sent => {
+                    if (sent) toast.success(`Invitación oficial enviada a ${guestEmail}`);
+                    else toast.success(`Invitación simulada a ${guestEmail}`);
+                });
+            }
         } else if (notifyParticipants) {
             toast.success('Evento creado y notificaciones internas enviadas');
         } else {
@@ -343,7 +346,7 @@ const Calendar: React.FC = () => {
                 folder: 'sent',
             };
 
-            // Real Cancellation Email
+            // Real Cancellation Email (Portal side)
             EmailService.sendEmail({
                 to_email: selectedEvent.guestEmail,
                 email_to: selectedEvent.guestEmail,
@@ -352,6 +355,25 @@ const Calendar: React.FC = () => {
                 message: `Estimado/a,\n\nLamentamos informarle que el evento ${selectedEvent.title} programado para el ${selectedEvent.day} de ${monthName} ha sido cancelado.\n\nDisculpe las molestias.\n\nAtentamente,\nEquipo Aniquem`,
                 from_name: "Aniquem Events"
             });
+
+            // Sync Delete with Backend
+            if (WEBHOOK_URL) {
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({
+                        action: 'DELETE',
+                        sheet: 'Calendario',
+                        apiKey: "ANIQUEM_SECRET_KEY_2026",
+                        id: selectedEvent.id,
+                        title: selectedEvent.title,
+                        day: selectedEvent.day,
+                        month: selectedEvent.month,
+                        year: selectedEvent.year
+                    })
+                });
+            }
             // Also simulate a notification to the user (Inbox) confirming the cancelation was sent
             const cancellationConfirmation = {
                 id: Date.now() + 1,
@@ -369,6 +391,24 @@ const Calendar: React.FC = () => {
             setEmails([cancellationConfirmation, cancellationEmailToGuest, ...emails]);
             toast.success(`Evento eliminado y notificación enviada a ${selectedEvent.guestEmail}`);
         } else {
+            // Sync Delete with Backend even if no guest
+            if (WEBHOOK_URL) {
+                fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({
+                        action: 'DELETE',
+                        sheet: 'Calendario',
+                        apiKey: "ANIQUEM_SECRET_KEY_2026",
+                        id: selectedEvent.id,
+                        title: selectedEvent.title,
+                        day: selectedEvent.day,
+                        month: selectedEvent.month,
+                        year: selectedEvent.year
+                    })
+                });
+            }
             setEvents(events.filter(e => e.id !== selectedEvent.id));
             toast.success('Evento eliminado');
         }

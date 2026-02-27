@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, X, ShieldCheck, RefreshCw } from 'lucide-react';
+import { Search, Plus, X, ShieldCheck, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface UserItem {
@@ -66,7 +66,8 @@ const Users: React.FC = () => {
             email: formData.email,
             password: formData.password,
             name: formData.name,
-            role: formData.role
+            role: formData.role,
+            apiKey: "ANIQUEM_SECRET_KEY_2026"
         };
 
         try {
@@ -105,7 +106,8 @@ const Users: React.FC = () => {
                 body: JSON.stringify({
                     action: 'DELETE',
                     sheet: 'Usuarios',
-                    id: email
+                    id: email,
+                    apiKey: "ANIQUEM_SECRET_KEY_2026"
                 })
             });
 
@@ -228,7 +230,7 @@ const Users: React.FC = () => {
                                                 className="text-primary hover:text-red-700 transition-all p-2 rounded-lg hover:bg-primary/10"
                                                 title="Editar Usuario"
                                             >
-                                                <RefreshCw className="h-4 w-4" />
+                                                <Pencil className="h-4 w-4" />
                                             </button>
                                             <button
                                                 onClick={() => setDeleteId(person.email)}

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Calendar, Mail } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { toast } from 'sonner';
-import { Handshake, MessageCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { Handshake, AlertCircle, ArrowRight } from 'lucide-react';
 
 // Define duplicate interfaces for now to avoid major refactor, ideally these go in a types file
 interface Email {
@@ -23,6 +22,9 @@ const data = [
 
 const Dashboard: React.FC = () => {
     const [unreadEmails, setUnreadEmails] = useState(0);
+    const [newProspects, setNewProspects] = useState(0);
+    const [meetingsToday, setMeetingsToday] = useState(0);
+    const [inProcessAllies, setInProcessAllies] = useState(0);
 
     useEffect(() => {
         // Emails
@@ -30,33 +32,51 @@ const Dashboard: React.FC = () => {
         if (storedEmails) {
             try {
                 const parsed: Email[] = JSON.parse(storedEmails);
-                // Count inbox unread
                 const unread = parsed.filter(e => (e.folder === 'inbox' || !e.folder) && !e.deleted && !e.read).length;
                 setUnreadEmails(unread);
             } catch (e) {
                 setUnreadEmails(2);
             }
         } else {
-            setUnreadEmails(2); // Initial inbox has 2 unread
+            setUnreadEmails(2);
         }
 
-        // Simulate Smart Capture Notification after 3 seconds
-        const timer = setTimeout(() => {
-            toast.success('¡Nueva Captura Automática!', {
-                description: 'El sistema detectó un mensaje de WhatsApp de "Alicorp" y ha creado un nuevo prospecto.',
-                icon: <MessageCircle className="h-5 w-5 text-green-500" />,
-                duration: 5000,
-            });
-        }, 3000);
+        // Alianzas Stats
+        const storedAlianzas = localStorage.getItem('aniquem-alianzas');
+        if (storedAlianzas) {
+            try {
+                const alianzas = JSON.parse(storedAlianzas);
+                setNewProspects(alianzas.length);
+                const inProcess = alianzas.filter((a: any) => a.estado === 'contactado' || a.estado === 'negociacion').length;
+                setInProcessAllies(inProcess || 0);
+            } catch (e) {
+                setNewProspects(0);
+            }
+        }
 
-        return () => clearTimeout(timer);
+        // Events Stats
+        const storedEvents = localStorage.getItem('aniquem-events');
+        if (storedEvents) {
+            try {
+                const events = JSON.parse(storedEvents);
+                const today = new Date();
+                const todayCount = events.filter((e: any) =>
+                    e.day === today.getDate() &&
+                    e.month === today.getMonth() &&
+                    e.year === today.getFullYear()
+                ).length;
+                setMeetingsToday(todayCount);
+            } catch (e) {
+                setMeetingsToday(0);
+            }
+        }
     }, []);
 
     const stats = [
-        { name: 'Prospectos Nuevos', stat: '8', icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+        { name: 'Prospectos Totales', stat: newProspects.toString(), icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
         { name: 'Mensajes Sin Leer', stat: unreadEmails.toString(), icon: Mail, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-900/30' },
-        { name: 'Alianzas en Proceso', stat: '14', icon: Handshake, color: 'text-primary', bg: 'bg-primary/10' },
-        { name: 'Reuniones Hoy', stat: '4', icon: Calendar, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
+        { name: 'Alianzas en Proceso', stat: inProcessAllies.toString(), icon: Handshake, color: 'text-primary', bg: 'bg-primary/10' },
+        { name: 'Reuniones Hoy', stat: meetingsToday.toString(), icon: Calendar, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-100 dark:bg-yellow-900/30' }
     ];
 
     return (
@@ -202,15 +222,6 @@ const Dashboard: React.FC = () => {
                                 <p className="text-sm text-muted-foreground mt-1">Programada vía Calendly para mañana a las 10:00 AM</p>
                             </div>
                             <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">hace 1h</span>
-                        </div>
-                    </li>
-                    <li className="relative pl-6 before:absolute before:left-0 before:top-2 before:w-2 before:h-2 before:bg-blue-500 before:rounded-full">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1">
-                            <div>
-                                <h4 className="text-sm font-semibold text-foreground">Nueva empresa registrada automáticamente</h4>
-                                <p className="text-sm text-muted-foreground mt-1">Alicorp S.A.A. ha sido añadida vía captura de WhatsApp Business.</p>
-                            </div>
-                            <span className="text-xs font-medium text-muted-foreground bg-muted px-2 py-1 rounded-md self-start">hace 3h</span>
                         </div>
                     </li>
                 </ul>

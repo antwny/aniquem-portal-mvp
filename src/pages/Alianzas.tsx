@@ -148,7 +148,7 @@ const Alianzas: React.FC = () => {
                 method: 'POST',
                 mode: 'no-cors',
                 headers: { 'Content-Type': 'text/plain' },
-                body: JSON.stringify({ ...data, action, sheet: 'Alianzas' })
+                body: JSON.stringify({ ...data, action, sheet: 'Alianzas', apiKey: "ANIQUEM_SECRET_KEY_2026" })
             });
             toast.info('Sincronizando', { description: `Operación ${action} enviada a la nube.` });
         } catch (error) {
